@@ -118,6 +118,7 @@ static void dumb_hdm_handler(CXLComponentState *cxl_cstate, hwaddr offset,
     stl_le_p((uint8_t *)cache_mem + offset, value);
 
     if (should_commit) {
+        cfmws_update_non_interleaved();
         cxl_update_isp();
     }
 }
