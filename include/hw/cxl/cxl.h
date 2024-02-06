@@ -76,4 +76,6 @@ typedef struct CXLDownstreamPort CXLDownstreamPort;
 DECLARE_INSTANCE_CHECKER(CXLDownstreamPort, CXL_DSP, TYPE_CXL_DSP)
 
 void cxl_update_isp(void);
+bool cfmws_update_non_interleaved(void);
+
 #endif
