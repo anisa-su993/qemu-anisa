@@ -84,6 +84,9 @@ typedef struct PCIEAERErr PCIEAERErr;
 bool ghes_record_cxl_errors(PCIDevice *dev, PCIEAERErr *err,
                             CXLError *cxl_err, uint32_t notify);
 
+typedef struct CXLEventGenMedia CXLEventGenMedia;
+bool ghes_record_cxl_event_gm(PCIDevice *dev,
+                           CXLEventGenMedia *gem, uint32_t notify);
 /**
  * acpi_ghes_present: Report whether ACPI GHES table is present
  *
