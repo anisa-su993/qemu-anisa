@@ -173,6 +173,7 @@ static void rasf_doorbell(ACPIRASFState *s)
     case RASF_PATROL_SCRUB_CMD_GET_PARAMS:
         s->data.ras_pb.out_addr_base = s->scrub_vals.base;
         s->data.ras_pb.out_addr_size = s->scrub_vals.size;
+        
         s->data.ras_pb.out_flags = s->scrub_vals.flags;
 #if defined(CONFIG_ACPI_RAS2_FT)
         s->data.ras_pb.out_scrub_params = (s->scrub_vals.max_scrub_rate << 16) |
@@ -182,8 +183,8 @@ static void rasf_doorbell(ACPIRASFState *s)
         s->data.set_ras_cap_stat = RASF_RAS_CAP_STAT_SUCCESS;
         return;
     case RASF_PATROL_SCRUB_CMD_START:
-        s->scrub_vals.base = s->data.ras_pb.in_addr_base;
-        s->scrub_vals.size = s->data.ras_pb.in_addr_size;
+        s->scrub_vals.base = s->data.ras_pb.in_addr_base & ~0xffff;
+        s->scrub_vals.size = s->data.ras_pb.in_addr_size & ~0xffff;
 #if defined(CONFIG_ACPI_RAS2_FT)
         s->scrub_vals.flags |= 1;
 	scrub_rate = (s->data.ras_pb.in_scrub_params >> 8) & 0xFF;
@@ -192,7 +193,7 @@ static void rasf_doorbell(ACPIRASFState *s)
 		s->data.set_ras_cap_stat = RASF_RAS_CAP_STAT_INVALID_DATA;
 		return;
 	}
-	s->scrub_vals.cur_scrub_rate = scrub_rate;
+	s->scrub_vals.cur_scrub_rate = scrub_rate & ~0x1;
 	s->scrub_vals.en_background_patrol_scrub = s->data.ras_pb.in_scrub_params & 0x01;
 #else
         /* Odd we have an input parameter that says if is already running */
@@ -200,6 +201,7 @@ static void rasf_doorbell(ACPIRASFState *s)
 #endif
         s->data.ras_pb.out_addr_base = s->data.ras_pb.in_addr_base;
         s->data.ras_pb.out_addr_size = s->data.ras_pb.in_addr_size;
+
         s->data.set_ras_cap_stat = RASF_RAS_CAP_STAT_SUCCESS;
         return;
     case RASF_PATROL_SCRUB_CMD_STOP:
