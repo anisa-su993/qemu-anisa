@@ -78,6 +78,7 @@ int acpi_ghes_record_errors(uint8_t notify, uint64_t error_physical_addr);
 
 typedef struct PCIDevice PCIDevice;
 bool ghes_record_aer_errors(PCIDevice *dev, uint32_t notify);
+bool ghes_record_arm_errors(uint8_t type, uint32_t notify);
 
 typedef struct CXLError CXLError;
 typedef struct PCIEAERErr PCIEAERErr;
