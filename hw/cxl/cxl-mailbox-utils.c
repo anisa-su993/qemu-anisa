@@ -107,6 +107,7 @@ enum {
         #define GET_MHD_INFO 0x0
 	FMAPI_DCD_MGMT = 0x56,
 		#define GET_DCD_INFO 0x0
+		#define GET_HOST_DC_REGION_CONFIG 0x1
 };
 
 /* CCI Message Format CXL r3.1 Figure 7-19 */
@@ -2751,6 +2752,104 @@ static CXLRetCode cmd_fmapi_get_dcd_info(const struct cxl_cmd *cmd,
     return CXL_MBOX_SUCCESS;
 }
 
+/*
+ * CXL r3.1 section 7.6.7.6.2: Get Host DC Region Configuration (Opcode 5601h
+ */
+static CXLRetCode cmd_fmapi_get_host_dc_region_config(const struct cxl_cmd *cmd,
+                                          uint8_t *payload_in,
+                                          size_t len_in,
+                                          uint8_t *payload_out,
+                                          size_t *len_out,
+                                          CXLCCI *cci)
+{
+	CXLType3Dev *ct3d = CXL_TYPE3(cci->d);
+	uint16_t record_count;
+    uint16_t i;
+    uint8_t start_rid;
+	struct {
+		uint16_t host_id;
+		uint8_t region_cnt;
+		uint8_t starting_reg_index;
+	} QEMU_PACKED *request;
+	struct {
+		uint16_t host_id;
+		uint8_t num_available_regs;
+		uint8_t num_regs_returned;
+		struct {
+			uint64_t base;
+            uint64_t decode_len;
+            uint64_t region_len;
+            uint64_t block_size;
+            uint32_t dsmadhandle;
+            uint8_t flags;
+            uint8_t rsvd[3];
+		} QEMU_PACKED records[];
+	} QEMU_PACKED *rsp;
+	struct {
+		uint32_t num_extents_supported;
+		uint32_t num_extents_available;
+		uint32_t num_tags_supported;
+		uint32_t num_tags_available;
+	} QEMU_PACKED *rsp_end;
+
+
+    if (ct3d->dc.num_regions == 0) {
+		return CXL_MBOX_UNSUPPORTED;
+	}
+
+	request = (void *)payload_in;
+	if (len_in != sizeof(*request) ||
+		request->region_cnt > 8 ||
+		request->starting_reg_index >= ct3d->dc.num_regions)
+	{
+		return CXL_MBOX_INVALID_INPUT;
+	}
+
+	start_rid = request->starting_reg_index;
+	record_count = MIN(ct3d->dc.num_regions - start_rid, request->region_cnt);
+
+	rsp = (void *)payload_out;
+	*len_out = sizeof(*rsp) + record_count * sizeof(rsp->records[0]);
+	memset(rsp, 0, *len_out);
+
+	rsp_end = (void *)(rsp) + *len_out;
+	memset(rsp_end, 0, sizeof(*rsp_end));
+	*len_out += sizeof(*rsp_end);
+
+    assert(*len_out<= CXL_MAILBOX_MAX_PAYLOAD_SIZE);
+
+	// TODO: Assign host id once multiple hosts supported
+	stw_le_p(&rsp->host_id, 0);
+	rsp->num_available_regs = ct3d->dc.num_regions;
+	rsp->num_regs_returned = record_count;
+
+	for (i = 0; i < record_count; i++) {
+        stq_le_p(&rsp->records[i].base,
+                 ct3d->dc.regions[start_rid + i].base);
+        stq_le_p(&rsp->records[i].decode_len,
+                 ct3d->dc.regions[start_rid + i].decode_len /
+                 CXL_CAPACITY_MULTIPLIER);
+        stq_le_p(&rsp->records[i].region_len,
+                 ct3d->dc.regions[start_rid + i].len);
+        stq_le_p(&rsp->records[i].block_size,
+                 ct3d->dc.regions[start_rid + i].block_size);
+        stl_le_p(&rsp->records[i].dsmadhandle,
+                 ct3d->dc.regions[start_rid + i].dsmadhandle);
+        rsp->records[i].flags = ct3d->dc.regions[start_rid + i].flags;
+    }
+    /*
+     * TODO: Assign values once extents and tags are introduced
+     * to use.
+     */
+    stl_le_p(&rsp_end->num_extents_supported, CXL_NUM_EXTENTS_SUPPORTED);
+    stl_le_p(&rsp_end->num_extents_available, CXL_NUM_EXTENTS_SUPPORTED -
+             ct3d->dc.total_extent_count);
+    stl_le_p(&rsp_end->num_tags_supported, CXL_NUM_TAGS_SUPPORTED);
+    stl_le_p(&rsp_end->num_tags_available, CXL_NUM_TAGS_SUPPORTED);
+
+	return CXL_MBOX_SUCCESS;
+}
+
 static const struct cxl_cmd cxl_cmd_set[256][256] = {
     [EVENTS][GET_RECORDS] = { "EVENTS_GET_RECORDS",
         cmd_events_get_records, 1, 0 },
@@ -2848,7 +2947,8 @@ static const struct cxl_cmd cxl_cmd_set_sw[256][256] = {
 };
 
 static const struct cxl_cmd cxl_cmd_set_fm_dcd[256][256] = {
-	[FMAPI_DCD_MGMT][GET_DCD_INFO] = { "GET_DCD_INFO", cmd_fmapi_get_dcd_info, 0, 0}
+	[FMAPI_DCD_MGMT][GET_DCD_INFO] = { "GET_DCD_INFO", cmd_fmapi_get_dcd_info, 0, 0},
+	[FMAPI_DCD_MGMT][GET_HOST_DC_REGION_CONFIG] = {"GET_HOST_DC_REGION_CONFIG", cmd_fmapi_get_host_dc_region_config, 4, 0},
 };
 
 /*
