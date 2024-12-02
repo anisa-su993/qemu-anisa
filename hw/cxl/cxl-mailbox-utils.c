@@ -108,6 +108,7 @@ enum {
 	FMAPI_DCD_MGMT = 0x56,
 		#define GET_DCD_INFO 0x0
 		#define GET_HOST_DC_REGION_CONFIG 0x1
+		#define SET_DC_REGION_CONFIG 0x2
 };
 
 /* CCI Message Format CXL r3.1 Figure 7-19 */
@@ -2850,6 +2851,58 @@ static CXLRetCode cmd_fmapi_get_host_dc_region_config(const struct cxl_cmd *cmd,
 	return CXL_MBOX_SUCCESS;
 }
 
+/*
+ * CXL r3.1 section 7.6.7.6.3: Set Host DC Region Configuration (Opcode 5602)
+ */
+static CXLRetCode cmd_fmapi_set_dc_region_config(const struct cxl_cmd *cmd,
+                                          uint8_t *payload_in,
+                                          size_t len_in,
+                                          uint8_t *payload_out,
+                                          size_t *len_out,
+                                          CXLCCI *cci)
+{
+	CXLType3Dev *ct3d = CXL_TYPE3(cci->d);
+	CXLDCRegion *region;
+	uint8_t *sanitize;
+	struct {
+		uint8_t reg_id;
+		uint8_t rsvd[3];
+		uint64_t block_sz;
+		uint8_t sanitize_on_release;
+		uint8_t rsvd2[3];
+	} QEMU_PACKED *req;
+
+	if (ct3d->dc.num_regions == 0) {
+		return CXL_MBOX_UNSUPPORTED;
+	}
+
+	if (len_in != sizeof(*req)) {
+		return CXL_MBOX_INVALID_INPUT;
+	}
+
+	// TODO: Fail with unsupported when all capacity has been released
+	// from the DC Region on all hosts, and one or
+	// more blocks are allocated to the specified region when multiple hosts supported
+
+	// TODO: Fail with unsupported when sanitize on rls field doesn't match
+	// current config and setting not in the config_support_mask from get_dcd_info rsp
+
+	// TODO: Fail with invalid security state if device has been locked
+
+	req = (void *)payload_in;
+
+	if (req->reg_id >= DCD_MAX_NUM_REGION) {
+		return CXL_MBOX_UNSUPPORTED;
+	}
+
+	region = &ct3d->dc.regions[req->reg_id];
+	stq_le_p(&region->block_size, req->block_sz);
+	sanitize = (uint8_t *)(&region->dsmadhandle);
+	*sanitize = req->sanitize_on_release;
+
+	return CXL_MBOX_SUCCESS;
+}
+
 static const struct cxl_cmd cxl_cmd_set[256][256] = {
     [EVENTS][GET_RECORDS] = { "EVENTS_GET_RECORDS",
         cmd_events_get_records, 1, 0 },
@@ -2949,6 +3002,13 @@ static const struct cxl_cmd cxl_cmd_set_sw[256][256] = {
 static const struct cxl_cmd cxl_cmd_set_fm_dcd[256][256] = {
 	[FMAPI_DCD_MGMT][GET_DCD_INFO] = { "GET_DCD_INFO", cmd_fmapi_get_dcd_info, 0, 0},
 	[FMAPI_DCD_MGMT][GET_HOST_DC_REGION_CONFIG] = {"GET_HOST_DC_REGION_CONFIG", cmd_fmapi_get_host_dc_region_config, 4, 0},
+	[FMAPI_DCD_MGMT][SET_DC_REGION_CONFIG] = {"SET_DC_REGION_CONFIG", cmd_fmapi_set_dc_region_config, 16,
+								(CXL_MBOX_CONFIG_CHANGE_COLD_RESET |
+								 CXL_MBOX_CONFIG_CHANGE_CONV_RESET |
+								 CXL_MBOX_CONFIG_CHANGE_CXL_RESET |
+								 CXL_MBOX_IMMEDIATE_CONFIG_CHANGE |
+                                 CXL_MBOX_IMMEDIATE_DATA_CHANGE)},
+
 };
 
 /*
