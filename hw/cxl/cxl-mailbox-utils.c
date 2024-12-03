@@ -113,6 +113,7 @@ enum {
 		#define INITIATE_DC_ADD				0x4
 		#define INITIATE_DC_RELEASE			0x5
 		#define DC_ADD_REFERENCE			0x6
+		#define DC_REMOVE_REFERENCE			0x7
 
 };
 
@@ -3282,6 +3283,22 @@ static CXLRetCode cmd_fmapi_dc_add_ref(const struct cxl_cmd *cmd,
 	return CXL_MBOX_SUCCESS;
 }
 
+/*
+ * CXL r3.1 Section 7.6.7.6.8 Dynamic Capacity Remove Reference (Opcode 5607h)
+ */
+static CXLRetCode cmd_fmapi_dc_remove_ref(const struct cxl_cmd *cmd,
+										uint8_t *payload_in,
+										size_t len_in,
+										uint8_t *payload_out,
+										size_t *len_out,
+										CXLCCI *cci)
+{
+    /* FIXME: Implement once sharing enabled -- will need to add ref_count to extents */
+	*len_out = 0;
+	return CXL_MBOX_SUCCESS;
+}
+
+
 static const struct cxl_cmd cxl_cmd_set[256][256] = {
     [EVENTS][GET_RECORDS] = { "EVENTS_GET_RECORDS",
         cmd_events_get_records, 1, 0 },
@@ -3401,6 +3418,11 @@ static const struct cxl_cmd cxl_cmd_set_fm_dcd[256][256] = {
 								 CXL_MBOX_IMMEDIATE_CONFIG_CHANGE |
                                  CXL_MBOX_IMMEDIATE_DATA_CHANGE)},
 	[FMAPI_DCD_MGMT][DC_ADD_REFERENCE] = {"DC_ADD_REF", cmd_fmapi_dc_add_ref, 16,
+								(CXL_MBOX_CONFIG_CHANGE_COLD_RESET |
+								 CXL_MBOX_CONFIG_CHANGE_CONV_RESET |
+								 CXL_MBOX_CONFIG_CHANGE_CXL_RESET |
+								 CXL_MBOX_IMMEDIATE_CONFIG_CHANGE)},
+	[FMAPI_DCD_MGMT][DC_REMOVE_REFERENCE] = {"DC_REMOVE_REF", cmd_fmapi_dc_remove_ref, 16,
 								(CXL_MBOX_CONFIG_CHANGE_COLD_RESET |
 								 CXL_MBOX_CONFIG_CHANGE_CONV_RESET |
 								 CXL_MBOX_CONFIG_CHANGE_CXL_RESET |
