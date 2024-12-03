@@ -109,6 +109,7 @@ enum {
 		#define GET_DCD_INFO 0x0
 		#define GET_HOST_DC_REGION_CONFIG 0x1
 		#define SET_DC_REGION_CONFIG 0x2
+		#define GET_DC_REGION_EXTENT_LIST 0x3
 };
 
 /* CCI Message Format CXL r3.1 Figure 7-19 */
@@ -2903,6 +2904,85 @@ static CXLRetCode cmd_fmapi_set_dc_region_config(const struct cxl_cmd *cmd,
 	return CXL_MBOX_SUCCESS;
 }
 
+/*
+ * CXL r3.1 section 7.6.7.6.4 Get DC Region Extent Lists (Opcode 5603h)
+ */
+static CXLRetCode cmd_fmapi_get_dc_region_extent_list(const struct cxl_cmd *cmd,
+											uint8_t *payload_in,
+											size_t len_in,
+											uint8_t *payload_out,
+											size_t *len_out,
+											CXLCCI *cci)
+{
+    uint16_t num_exts_to_return = 0, indx = 0, out_pl_len = 0;
+	CXLType3Dev *ct3d = CXL_TYPE3(cci->d);
+	CXLDCExtent *ent;
+	CXLDCExtentRaw *out_ext;
+	struct {
+		uint16_t host_id;
+		uint8_t rsvd[2];
+		uint32_t extent_count;
+		uint32_t start_ex_indx;
+	} QEMU_PACKED *req;
+	struct {
+		uint16_t host_id;
+		uint8_t rsvd[2];
+		uint32_t start_ex_indx;
+		uint32_t extents_returned;
+		uint32_t total_extents;
+		uint32_t list_generation_num;
+		uint8_t rsvd2[4];
+		CXLDCExtentRaw extents[];
+	} QEMU_PACKED *rsp = (void *)payload_out;
+	QEMU_BUILD_BUG_ON(sizeof(*req) != 0xc);
+
+	if (ct3d->dc.num_regions == 0) {
+		return CXL_MBOX_UNSUPPORTED;
+	}
+
+	req = (void*)payload_in;
+
+	if (req->start_ex_indx > ct3d->dc.total_extent_count) {
+        return CXL_MBOX_INVALID_INPUT;
+    }
+
+    num_exts_to_return = MIN(req->extent_count,
+                       ct3d->dc.total_extent_count - req->start_ex_indx);
+    num_exts_to_return = MIN(num_exts_to_return,
+						(CXL_MAILBOX_MAX_PAYLOAD_SIZE - sizeof(*rsp)) / sizeof(CXLDCExtentRaw));
+    out_pl_len = sizeof(*rsp) + num_exts_to_return * sizeof(CXLDCExtentRaw);
+
+	stw_le_p(&rsp->host_id, req->host_id);
+    stl_le_p(&rsp->start_ex_indx, req->start_ex_indx);
+    stl_le_p(&rsp->extents_returned, num_exts_to_return);
+    stl_le_p(&rsp->total_extents, ct3d->dc.total_extent_count);
+	stl_le_p(&rsp->list_generation_num, ct3d->dc.ext_list_gen_seq);
+
+    if (num_exts_to_return) {
+        out_ext = &rsp->extents[indx];
+
+        QTAILQ_FOREACH(ent, &ct3d->dc.extents, node) {
+            if (indx < req->start_ex_indx) {
+                continue;
+            }
+            stq_le_p(&out_ext->start_dpa, ent->start_dpa);
+            stq_le_p(&out_ext->len, ent->len);
+            memcpy(&out_ext->tag, ent->tag, 0x10);
+            stw_le_p(&out_ext->shared_seq, ent->shared_seq);
+
+            indx++;
+			out_ext = &rsp->extents[indx];
+            if (indx == num_exts_to_return) {
+                break;
+            }
+        }
+    }
+
+    *len_out = out_pl_len;
+    return CXL_MBOX_SUCCESS;
+
+}
+
 static const struct cxl_cmd cxl_cmd_set[256][256] = {
     [EVENTS][GET_RECORDS] = { "EVENTS_GET_RECORDS",
         cmd_events_get_records, 1, 0 },
@@ -3008,6 +3088,7 @@ static const struct cxl_cmd cxl_cmd_set_fm_dcd[256][256] = {
 								 CXL_MBOX_CONFIG_CHANGE_CXL_RESET |
 								 CXL_MBOX_IMMEDIATE_CONFIG_CHANGE |
                                  CXL_MBOX_IMMEDIATE_DATA_CHANGE)},
+	[FMAPI_DCD_MGMT][GET_DC_REGION_EXTENT_LIST] = {"GET_DC_REGION_EXTENT_LIST", cmd_fmapi_get_dc_region_extent_list, 12, 0},
 
 };
 
