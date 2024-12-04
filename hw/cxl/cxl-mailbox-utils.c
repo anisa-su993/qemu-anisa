@@ -111,6 +111,7 @@ enum {
 		#define SET_DC_REGION_CONFIG 0x2
 		#define GET_DC_REGION_EXTENT_LIST 0x3
 		#define INITIATE_DC_ADD				0x4
+		#define INITIATE_DC_RELEASE			0x5
 
 };
 
@@ -3168,7 +3169,19 @@ static CXLRetCode cxl_mbox_process_dynamic_capacity_prescriptive(CXLType3Dev *dc
 														event_rec_exts[i].len,
 														event_rec_exts[i].tag,
 														event_rec_exts[i].shared_seq);
-		}
+		} else if (type == DC_EVENT_RELEASE_CAPACITY) {
+            if (cxl_extent_groups_overlaps_dpa_range(&dcd->dc.extents_pending,
+                                                     ext.start_dpa, ext.len)) {
+                qemu_log_mask(LOG_UNIMP,
+                           "Cannot release currently pending extent.\n");
+                return CXL_MBOX_INVALID_PA;
+            }
+            if (!ct3_test_region_block_backed(dcd, ext.start_dpa, ext.len)) {
+                qemu_log_mask(LOG_UNIMP,
+                           "Cannot release extent with non-existing DPA range.\n");
+                return CXL_MBOX_INVALID_PA;
+            }
+        }
     }
 
 	/* Add requested extents to pending list. */
@@ -3207,6 +3220,45 @@ static CXLRetCode cmd_fmapi_initiate_dc_add(const struct cxl_cmd *cmd,
 	default:
     	qemu_log_mask(LOG_UNIMP, "CXL extent selection policy not supported.\n");
     	return CXL_MBOX_INVALID_INPUT;
+    }
+
+	*len_out = 0;
+	return CXL_MBOX_SUCCESS;
+}
+
+/*
+ * CXL r3.1 Section 7.6.7.6.6 Initiate Dynamic Capacity Release (Opcode 5605h)
+ */
+static CXLRetCode cmd_fmapi_initiate_dc_release(const struct cxl_cmd *cmd,
+										uint8_t *payload_in,
+										size_t len_in,
+										uint8_t *payload_out,
+										size_t *len_out,
+										CXLCCI *cci)
+{
+    CXLType3Dev *ct3d = CXL_TYPE3(cci->d);
+	CXLDCEventType type;
+	struct {
+		uint16_t host_id;
+		uint8_t flags;
+		uint8_t reg_num;
+		uint64_t length;
+		uint8_t tag[0x10];
+		uint32_t ext_count;
+		CXLDCExtentRaw extents[];
+	} QEMU_PACKED *req = (void *)payload_in;
+
+	/* TODO: enable forced removal (bit 4) in the future */
+
+	/* TODO: check sanitize bit (bit 5) when supported*/
+
+	switch (req->flags & 0x7) {
+    case CXL_EXTENT_REMOVAL_POLICY_PRESCRIPTIVE:
+		type = DC_EVENT_RELEASE_CAPACITY;
+        return cxl_mbox_process_dynamic_capacity_prescriptive(ct3d, req, type);
+    default:
+		qemu_log_mask(LOG_UNIMP, "CXL extent selection policy not supported.\n");
+		return CXL_MBOX_INVALID_INPUT;
     }
 
 	*len_out = 0;
@@ -3320,6 +3372,12 @@ static const struct cxl_cmd cxl_cmd_set_fm_dcd[256][256] = {
                                  CXL_MBOX_IMMEDIATE_DATA_CHANGE)},
 	[FMAPI_DCD_MGMT][GET_DC_REGION_EXTENT_LIST] = {"GET_DC_REGION_EXTENT_LIST", cmd_fmapi_get_dc_region_extent_list, 12, 0},
 	[FMAPI_DCD_MGMT][INITIATE_DC_ADD] = {"INIT_DC_ADD", cmd_fmapi_initiate_dc_add, 32,
+								(CXL_MBOX_CONFIG_CHANGE_COLD_RESET |
+								 CXL_MBOX_CONFIG_CHANGE_CONV_RESET |
+								 CXL_MBOX_CONFIG_CHANGE_CXL_RESET |
+								 CXL_MBOX_IMMEDIATE_CONFIG_CHANGE |
+                                 CXL_MBOX_IMMEDIATE_DATA_CHANGE)},
+	[FMAPI_DCD_MGMT][INITIATE_DC_RELEASE] = {"INIT_DC_RELEASE", cmd_fmapi_initiate_dc_release, 32,
 								(CXL_MBOX_CONFIG_CHANGE_COLD_RESET |
 								 CXL_MBOX_CONFIG_CHANGE_CONV_RESET |
 								 CXL_MBOX_CONFIG_CHANGE_CXL_RESET |
