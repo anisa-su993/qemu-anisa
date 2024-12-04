@@ -110,7 +110,27 @@ enum {
 		#define GET_HOST_DC_REGION_CONFIG 0x1
 		#define SET_DC_REGION_CONFIG 0x2
 		#define GET_DC_REGION_EXTENT_LIST 0x3
+		#define INITIATE_DC_ADD				0x4
+
 };
+
+// TODO: Copied from hw/mem/cxl_type3.c Import or refactor somehow?
+typedef enum CXLDCEventType {
+    DC_EVENT_ADD_CAPACITY = 0x0,
+    DC_EVENT_RELEASE_CAPACITY = 0x1,
+    DC_EVENT_FORCED_RELEASE_CAPACITY = 0x2,
+    DC_EVENT_REGION_CONFIG_UPDATED = 0x3,
+    DC_EVENT_ADD_CAPACITY_RSP = 0x4,
+    DC_EVENT_CAPACITY_RELEASED = 0x5,
+} CXLDCEventType;
+
+// TODO: Copied from hw/mem/cxl_type3.c Import or refactor somehow?
+/* CXL r3.1 Table 8-50: Dynamic Capacity Event Record */
+static const QemuUUID dynamic_capacity_uuid = {
+    .data = UUID(0xca95afa7, 0xf183, 0x4018, 0x8c, 0x2f,
+                 0x95, 0x26, 0x8e, 0x10, 0x1a, 0x2a),
+};
+
 
 /* CCI Message Format CXL r3.1 Figure 7-19 */
 typedef struct CXLCCIMessage {
@@ -2983,6 +3003,216 @@ static CXLRetCode cmd_fmapi_get_dc_region_extent_list(const struct cxl_cmd *cmd,
 
 }
 
+/*
+ * Check that request extents don't overlap with each other and are
+ * within the boundaries of the region they belong to.
+ */
+static CXLRetCode dc_generic_extent_checks(uint32_t ext_count,
+									CXLDCExtentRaw extents[],
+									CXLType3Dev *dcd)
+{
+	int i, j;
+	CXLDCExtentRaw ext;
+	CXLDCRegion *reg;
+
+	for (i = 0; i < ext_count; i++) {
+		ext = extents[i];
+
+		if (ext.len == 0) {
+			qemu_log_mask(LOG_UNIMP, "Extent with 0 length is not allowed.\n");
+			return CXL_MBOX_INVALID_EXTENT_LIST;
+		}
+
+		reg = cxl_find_dc_region(dcd, ext.start_dpa, ext.len);
+		if (!reg) {
+			qemu_log_mask(LOG_UNIMP,
+				"Extent does not belong to any 1 region (overlaps multiple or out-of-bounds).\n");
+			return CXL_MBOX_INVALID_EXTENT_LIST;
+		}
+
+		if (ext.len % reg->block_size || ext.start_dpa % reg->block_size) {
+			qemu_log_mask(LOG_UNIMP, "DPA or len is not aligned to region block size.\n");
+			return CXL_MBOX_INVALID_EXTENT_LIST;
+		}
+
+		/* Check requested extents do not overlap with each other. */
+		for (j = i + 1; j < ext_count; j++) {
+			if (ranges_overlap(ext.start_dpa, ext.len, extents[j].start_dpa, extents[j].len)) {
+				qemu_log_mask(LOG_UNIMP, "Requested extents overlap with one another.\n");
+				return CXL_MBOX_INVALID_EXTENT_LIST;
+			}
+		}
+	}
+	return CXL_MBOX_SUCCESS;
+}
+
+static void cxl_mbox_dc_event_create_record(CXLType3Dev *dcd,
+												CXLDCEventType type,
+												CXLDCExtentRaw extents[],
+												uint32_t ext_count)
+{
+	/*
+     * CXL r3.1 section 8.2.9.2.1.6: Dynamic Capacity Event Record
+     *
+     * All Dynamic Capacity event records shall set the Event Record Severity
+     * field in the Common Event Record Format to Informational Event. All
+     * Dynamic Capacity related events shall be logged in the Dynamic Capacity
+     * Event Log.
+     */
+	int i;
+	CXLEventDynamicCapacity event_rec = {};
+    CXLEventRecordHdr *hdr = &event_rec.hdr;
+	uint8_t flags = 1 << CXL_EVENT_TYPE_INFO;
+	uint8_t enc_log = CXL_EVENT_TYPE_DYNAMIC_CAP;
+
+	st24_le_p(&hdr->flags, flags);
+    hdr->length = sizeof(event_rec);
+    memcpy(&hdr->id, &dynamic_capacity_uuid, sizeof(hdr->id));
+    stq_le_p(&hdr->timestamp, cxl_device_get_timestamp(&dcd->cxl_dstate));
+    event_rec.type = type;
+    /* FIXME: for now, validity flag is cleared */
+    event_rec.validity_flags = 0;
+	/* FIXME: Currently only support 1 host */
+    event_rec.host_id = 0;
+    /* only valid for DC_REGION_CONFIG_UPDATED event */
+    event_rec.updated_region_id = 0;
+    event_rec.flags = 0;
+    for (i = 0; i < ext_count; i++) {
+        memcpy(&event_rec.dynamic_capacity_extent, &extents[i],
+               sizeof(CXLDCExtentRaw));
+
+        if (i < ext_count - 1) {
+            /* Set "More" flag */
+            event_rec.flags |= BIT(0);
+        }
+
+        if (cxl_event_insert(&dcd->cxl_dstate, enc_log,
+                             (CXLEventRecordRaw *)&event_rec)) {
+            cxl_event_irq_assert(dcd);
+        }
+    }
+}
+
+static CXLRetCode cxl_mbox_process_dynamic_capacity_prescriptive(CXLType3Dev *dcd,
+																void *payload_in,
+																CXLDCEventType type)
+{
+	int i, rc;
+	CXLDCExtentRaw ext;
+	g_autofree CXLDCExtentRaw *event_rec_exts = NULL;
+	CXLDCExtentGroup *group = NULL;
+	struct {
+		uint16_t host_id;
+		uint8_t selection_policy;
+		uint8_t rsvd1;	// reg_num field reserved when policy is prescriptive
+		uint64_t rsvd2;	// length field reserved when policy is prescriptive
+		uint8_t rsvd3[0x10];	// tag field reserved when policy is prescriptive
+		uint32_t ext_count;
+		CXLDCExtentRaw extents[];
+	} QEMU_PACKED *req = payload_in;
+
+	if (dcd->dc.num_regions == 0) {
+		qemu_log_mask(LOG_UNIMP, "No dynamic capacity support from the device.\n");
+		return CXL_MBOX_UNSUPPORTED;
+	}
+
+	/* FIXME: Currently, only 1 host supported, so host_id must be 0. */
+	if (req->host_id != 0) {
+		qemu_log_mask(LOG_UNIMP, "Invalid host id.\n");
+		return CXL_MBOX_INVALID_INPUT;
+	}
+
+	if (dcd->dc.total_extent_count + req->ext_count > CXL_NUM_EXTENTS_SUPPORTED) {
+		qemu_log_mask(LOG_UNIMP, "Exceeds maximum num. extents supported.\n");
+		return CXL_MBOX_RESOURCES_EXHAUSTED;
+	}
+
+	/*
+	 * FIXME: Once tags supported -- Command shall fail with Resources Exhausted if request
+	 * would cause device to exceed tag tracking ability.
+	 */
+
+	/* Alignment/overlap check */
+	rc = dc_generic_extent_checks(req->ext_count, req->extents, dcd);
+	if (rc) {
+		return rc;
+	}
+
+	/* Do additional extent checks based on event type and prepare extents for Event Record */
+	event_rec_exts = g_new0(CXLDCExtentRaw, req->ext_count);
+	for (i = 0; i < req->ext_count; i++) {
+		ext = req->extents[i];
+		event_rec_exts[i].start_dpa = ext.start_dpa;
+		event_rec_exts[i].len = ext.len;
+		memset(event_rec_exts[i].tag, 0, 0x10);
+		event_rec_exts[i].shared_seq = 0;
+
+		if (type == DC_EVENT_ADD_CAPACITY) {
+			/* Check requested extents do not overlap with previously allocated extents. */
+			if (cxl_extents_overlaps_dpa_range(&dcd->dc.extents, ext.start_dpa, ext.len)) {
+				qemu_log_mask(LOG_UNIMP,
+							"Cannot add DPA already accessible to the same LD.\n");
+				return CXL_MBOX_INVALID_EXTENT_LIST;
+			}
+
+			/* Check requested extents do not overlap with pending extents. */
+			if (cxl_extent_groups_overlaps_dpa_range(&dcd->dc.extents_pending,
+														ext.start_dpa, ext.len)) {
+				qemu_log_mask(LOG_UNIMP,
+							"Cannot add DPA again while still pending.\n");
+				return CXL_MBOX_INVALID_EXTENT_LIST;
+			}
+			/* Create extent group to add to pending list. */
+			group = cxl_insert_extent_to_extent_group(group,
+														event_rec_exts[i].start_dpa,
+														event_rec_exts[i].len,
+														event_rec_exts[i].tag,
+														event_rec_exts[i].shared_seq);
+		}
+    }
+
+	/* Add requested extents to pending list. */
+	if (group) {
+		cxl_extent_group_list_insert_tail(&dcd->dc.extents_pending, group);
+	}
+
+	cxl_mbox_dc_event_create_record(dcd, type, event_rec_exts, req->ext_count);
+	return CXL_MBOX_SUCCESS;
+}
+
+/*
+ * CXL r3.1 Section 7.6.7.6.5 Initiate Dynamic Capacity Add (Opcode 5604h)
+ */
+static CXLRetCode cmd_fmapi_initiate_dc_add(const struct cxl_cmd *cmd,
+										uint8_t *payload_in,
+										size_t len_in,
+										uint8_t *payload_out,
+										size_t *len_out,
+										CXLCCI *cci)
+{
+	CXLType3Dev *ct3d = CXL_TYPE3(cci->d);
+	struct {
+		uint16_t host_id;
+		uint8_t selection_policy;
+		uint8_t reg_num;
+		uint64_t length;
+		uint8_t tag[0x10];
+		uint32_t ext_count;
+		CXLDCExtentRaw extents[];
+	} QEMU_PACKED *req = (void *)payload_in;
+
+	switch (req->selection_policy) {
+    case CXL_EXTENT_SELECTION_POLICY_PRESCRIPTIVE:
+        return cxl_mbox_process_dynamic_capacity_prescriptive(ct3d, req, DC_EVENT_ADD_CAPACITY);
+	default:
+    	qemu_log_mask(LOG_UNIMP, "CXL extent selection policy not supported.\n");
+    	return CXL_MBOX_INVALID_INPUT;
+    }
+
+	*len_out = 0;
+	return CXL_MBOX_SUCCESS;
+}
+
 static const struct cxl_cmd cxl_cmd_set[256][256] = {
     [EVENTS][GET_RECORDS] = { "EVENTS_GET_RECORDS",
         cmd_events_get_records, 1, 0 },
@@ -3089,6 +3319,12 @@ static const struct cxl_cmd cxl_cmd_set_fm_dcd[256][256] = {
 								 CXL_MBOX_IMMEDIATE_CONFIG_CHANGE |
                                  CXL_MBOX_IMMEDIATE_DATA_CHANGE)},
 	[FMAPI_DCD_MGMT][GET_DC_REGION_EXTENT_LIST] = {"GET_DC_REGION_EXTENT_LIST", cmd_fmapi_get_dc_region_extent_list, 12, 0},
+	[FMAPI_DCD_MGMT][INITIATE_DC_ADD] = {"INIT_DC_ADD", cmd_fmapi_initiate_dc_add, 32,
+								(CXL_MBOX_CONFIG_CHANGE_COLD_RESET |
+								 CXL_MBOX_CONFIG_CHANGE_CONV_RESET |
+								 CXL_MBOX_CONFIG_CHANGE_CXL_RESET |
+								 CXL_MBOX_IMMEDIATE_CONFIG_CHANGE |
+                                 CXL_MBOX_IMMEDIATE_DATA_CHANGE)},
 
 };
 

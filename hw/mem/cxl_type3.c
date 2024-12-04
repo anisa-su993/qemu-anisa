@@ -2027,7 +2027,7 @@ typedef enum CXLDCEventType {
  * the list.
  * Return value: return true if has overlaps; otherwise, return false
  */
-static bool cxl_extents_overlaps_dpa_range(CXLDCExtentList *list,
+bool cxl_extents_overlaps_dpa_range(CXLDCExtentList *list,
                                            uint64_t dpa, uint64_t len)
 {
     CXLDCExtent *ent;
@@ -2073,7 +2073,7 @@ bool cxl_extents_contains_dpa_range(CXLDCExtentList *list,
     return false;
 }
 
-static bool cxl_extent_groups_overlaps_dpa_range(CXLDCExtentGroupList *list,
+bool cxl_extent_groups_overlaps_dpa_range(CXLDCExtentGroupList *list,
                                                  uint64_t dpa, uint64_t len)
 {
     CXLDCExtentGroup *group;
