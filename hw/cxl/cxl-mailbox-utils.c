@@ -114,6 +114,7 @@ enum {
 		#define INITIATE_DC_RELEASE			0x5
 		#define DC_ADD_REFERENCE			0x6
 		#define DC_REMOVE_REFERENCE			0x7
+		#define DC_LIST_TAGS				0x8
 
 };
 
@@ -3298,6 +3299,52 @@ static CXLRetCode cmd_fmapi_dc_remove_ref(const struct cxl_cmd *cmd,
 	return CXL_MBOX_SUCCESS;
 }
 
+/*
+ * CXL r3.1 Section 7.6.7.6.9 Dynamic Capacity List Tags (Opcode 5608h)
+ */
+static CXLRetCode cmd_fmapi_dc_list_tags(const struct cxl_cmd *cmd,
+										uint8_t *payload_in,
+										size_t len_in,
+										uint8_t *payload_out,
+										size_t *len_out,
+										CXLCCI *cci)
+{
+	uint32_t num_tags_returned;
+	CXLType3Dev *ct3d = CXL_TYPE3(cci->d);
+	struct {
+		uint32_t start_ind;
+		uint32_t max_tags;
+	} QEMU_PACKED *req = (void *)payload_in;
+
+	struct {
+		uint32_t generation_num;
+		uint32_t total_num_tags;
+		uint32_t num_tags_returned;
+		uint8_t validity_bitmap;
+		uint8_t rsvd[3];
+		struct {
+			uint8_t tag[0x10];
+			uint8_t flags;
+			uint8_t rsvd[0x3];
+			uint8_t ref_bitmap[0x20];
+			uint8_t pending_ref_bitmap[0x20];
+		} QEMU_PACKED tags_list[];
+	} QEMU_PACKED *rsp = (void *)payload_out;
+
+	if (req->max_tags == 0) {
+		*len_out = 0;
+		return CXL_MBOX_SUCCESS;
+	}
+
+	stl_le_p(&rsp->generation_num, ct3d->dc.ext_list_gen_seq);
+	stl_le_p(&rsp->total_num_tags, req->max_tags);
+	num_tags_returned = 0;
+	stl_le_p(&rsp->num_tags_returned, num_tags_returned);
+
+	/* TODO: Fill in validity bitmap and tags_list when tags supported */
+	*len_out = sizeof(*rsp) + num_tags_returned * sizeof(rsp->tags_list[0]);
+	return CXL_MBOX_SUCCESS;
+}
 
 static const struct cxl_cmd cxl_cmd_set[256][256] = {
     [EVENTS][GET_RECORDS] = { "EVENTS_GET_RECORDS",
@@ -3427,6 +3474,7 @@ static const struct cxl_cmd cxl_cmd_set_fm_dcd[256][256] = {
 								 CXL_MBOX_CONFIG_CHANGE_CONV_RESET |
 								 CXL_MBOX_CONFIG_CHANGE_CXL_RESET |
 								 CXL_MBOX_IMMEDIATE_CONFIG_CHANGE)},
+	[FMAPI_DCD_MGMT][DC_LIST_TAGS] = {"DC_LIST_TAGS", cmd_fmapi_dc_list_tags, 8, 0}
 
 };
 
