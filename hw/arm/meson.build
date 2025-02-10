@@ -81,5 +81,6 @@ arm_common_ss.add(when: 'CONFIG_VEXPRESS', if_true: files('vexpress.c'))
 
 arm_common_ss.add(files('boot.c'))
 
+arm_ss.add(when: 'CONFIG_HISI_HHA', if_true: files('hisi_hha.c'))
 hw_arch += {'arm': arm_ss}
 hw_common_arch += {'arm': arm_common_ss}
