@@ -25,6 +25,7 @@
 #include "hw/usb.h"
 #include "hw/usb/desc.h"
 #include "net/mctp.h"
+#include "hw/cxl/cxl_mailbox.h"
 
 /* TODO: Move to header */
 
@@ -504,9 +505,10 @@ static void usb_cxl_mctp_handle_data(USBDevice *dev, USBPacket *p)
          * onwards.
          */
         if (!(req->message_type == MCTP_MT_CXL_TYPE3 &&
-              req->command_set < 0x51) &&
+              req->command_set < PHYSICAL_SWITCH) &&
             !(req->message_type == MCTP_MT_CXL_FMAPI &&
-              req->command_set >= 0x51 && req->command_set < 0x56)) {
+              req->command_set >= PHYSICAL_SWITCH &&
+              req->command_set < GLOBAL_MEM_ACCESS_EP_MGMT)) {
             len_out = 0;
             usb_pkt_len = sizeof(MCTPUSBPacket) + sizeof(CXLMCTPMessage) +
                 len_out;
