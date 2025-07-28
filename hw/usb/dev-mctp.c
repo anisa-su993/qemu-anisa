@@ -506,7 +506,7 @@ static void usb_cxl_mctp_handle_data(USBDevice *dev, USBPacket *p)
         if (!(req->message_type == MCTP_MT_CXL_TYPE3 &&
               req->command_set < 0x51) &&
             !(req->message_type == MCTP_MT_CXL_FMAPI &&
-              req->command_set >= 0x51 && req->command_set < 0x56)) {
+              req->command_set >= 0x51 && req->command_set < 0x59)) {
             len_out = 0;
             usb_pkt_len = sizeof(MCTPUSBPacket) + sizeof(CXLMCTPMessage) +
                 len_out;
