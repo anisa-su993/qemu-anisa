@@ -3566,7 +3566,8 @@ void cxl_insert_extent_to_extent_list(CXLDCExtentList *list,
                                              uint64_t len,
                                              uint8_t *tag,
                                              uint16_t shared_seq,
-                                             int rid)
+                                             int rid,
+                                             uint64_t offset)
 {
     CXLDCExtent *extent;
 
@@ -3575,6 +3576,7 @@ void cxl_insert_extent_to_extent_list(CXLDCExtentList *list,
     extent->fw = fw;
     extent->start_dpa = dpa;
     extent->len = len;
+    extent->offset = offset;
     if (tag) {
         memcpy(extent->tag, tag, 0x10);
     }
@@ -3603,7 +3605,8 @@ CXLDCExtentGroup *cxl_insert_extent_to_extent_group(CXLDCExtentGroup *group,
                                                     uint64_t len,
                                                     uint8_t *tag,
                                                     uint16_t shared_seq,
-                                                    int rid)
+                                                    int rid,
+                                                    uint64_t offset)
 {
     if (!group) {
         group = g_new0(CXLDCExtentGroup, 1);
@@ -3611,7 +3614,7 @@ CXLDCExtentGroup *cxl_insert_extent_to_extent_group(CXLDCExtentGroup *group,
     }
     cxl_insert_extent_to_extent_list(&group->list,
                                      host_mem, fw, dpa, len,
-                                     tag, shared_seq, rid);
+                                     tag, shared_seq, rid, offset);
     return group;
 }
 
@@ -3691,7 +3694,8 @@ static CXLRetCode cxl_detect_malformed_extent_list(CXLType3Dev *ct3d,
 static bool cxl_extent_find_extent_detail(CXLDCExtentGroupList *list,
                                           uint64_t start_dpa, uint64_t len,
                                           uint8_t *tag, HostMemoryBackend **hmb,
-                                          struct CXLFixedWindow **fw, int *rid)
+                                          struct CXLFixedWindow **fw, int *rid,
+                                          uint64_t *offset)
 {
     CXLDCExtent *ent;
     CXLDCExtentGroup *group = QTAILQ_FIRST(list);
@@ -3702,6 +3706,7 @@ static bool cxl_extent_find_extent_detail(CXLDCExtentGroupList *list,
             *hmb = ent->hm;
             memcpy(tag, ent->tag, 0x10);
             *rid = ent->rid;
+            *offset = ent->offset;
             return true;
         }
     }
@@ -3764,7 +3769,7 @@ static CXLRetCode cmd_dcd_add_dyn_cap_rsp(const struct cxl_cmd *cmd,
     HostMemoryBackend *hmb_dc;
     uint8_t tag[0x10];
     uint32_t i, num;
-    uint64_t dpa, len;
+    uint64_t dpa, len, offset;
     int rid;
     CXLRetCode ret;
 
@@ -3803,12 +3808,14 @@ static CXLRetCode cmd_dcd_add_dyn_cap_rsp(const struct cxl_cmd *cmd,
         dpa = in->updated_entries[i].start_dpa;
         len = in->updated_entries[i].len;
         if (ct3d->dc.total_capacity_cmd) {
+            int mr_idx = -1;
             bool found;
             MemoryRegion *mr;
 
             found = cxl_extent_find_extent_detail(&ct3d->dc.extents_pending,
                                                   dpa, len, tag,
-                                                  &hmb_dc, &fw, &rid);
+                                                  &hmb_dc, &fw, &rid,
+                                                  &offset);
 
             /*
              * Host accepted an extent where device lacks details including
@@ -3842,13 +3849,38 @@ static CXLRetCode cmd_dcd_add_dyn_cap_rsp(const struct cxl_cmd *cmd,
             memory_region_set_enabled(mr, true);
             host_memory_backend_set_mapped(hmb_dc, true);
 
+            /* Optional direct alias mapping into fixed memory window */
+            if (ct3d->direct_mr_enabled) {
+                uint32_t full_mask = (1u << CXL_DC_MAX_DIRECT_MR) - 1;
+                if ((ct3d->dc.direct_mr_bitmap & full_mask) == full_mask) {
+                    qemu_log_mask(LOG_GUEST_ERROR,
+                                  "Out of direct mapping slots\n");
+                    return CXL_MBOX_RESOURCES_EXHAUSTED;
+                }
+                mr_idx = ctz32(~ct3d->dc.direct_mr_bitmap);
+                g_autofree char *direct_mapping_name =
+                    g_strdup_printf("cxl-direct-mapping-%d", mr_idx);
+                hwaddr region_offset = dpa - ct3d->dc.regions[rid].base;
+                MemoryRegion *dr_dc_mr = &ct3d->dc.dc_direct_mr[mr_idx];
+
+                memory_region_init_alias(dr_dc_mr, OBJECT(ct3d),
+                                         direct_mapping_name, mr,
+                                         region_offset,
+                                         ct3d->dc.dc_decoder_window.size);
+                memory_region_add_subregion(&fw->mr,
+                    ct3d->dc.dc_decoder_window.base - fw->base + offset,
+                    dr_dc_mr);
+
+                ct3d->dc.direct_mr_bitmap |= (1u << mr_idx);
+            }
+
             cxl_insert_extent_to_extent_list(extent_list,
                                              hmb_dc, fw, dpa, len,
-                                             NULL, 0, rid);
+                                             tag, 0, rid, offset);
         } else {
             cxl_insert_extent_to_extent_list(extent_list,
                                              NULL, NULL, dpa, len,
-                                             NULL, 0, -1);
+                                             NULL, 0, -1, (uint64_t)-1);
         }
         ct3d->dc.total_extent_count += 1;
         ct3d->dc.nr_extents_accepted += 1;
@@ -3886,7 +3918,7 @@ static uint32_t copy_extent_list(CXLDCExtentList *dst,
                                          ent->hm, ent->fw,
                                          ent->start_dpa, ent->len,
                                          ent->tag, ent->shared_seq,
-                                         ent->rid);
+                                         ent->rid, ent->offset);
         cnt++;
     }
     return cnt;
@@ -3951,14 +3983,18 @@ static CXLRetCode cxl_dc_extent_release_dry_run(CXLType3Dev *ct3d,
                         cxl_insert_extent_to_extent_list(updated_list,
                                                          NULL, NULL,
                                                          ent_start_dpa, len1,
-                                                         NULL, 0, ent->rid);
+                                                         ent->tag, 0,
+                                                         ent->rid,
+                                                         ent->offset);
                         cnt_delta++;
                     }
                     if (len2) {
                         cxl_insert_extent_to_extent_list(updated_list,
                                                          NULL, NULL,
                                                          dpa + len, len2,
-                                                         NULL, 0, ent->rid);
+                                                         ent->tag, 0,
+                                                         ent->rid,
+                                                         ent->offset);
                         cnt_delta++;
                     }
 
@@ -4471,7 +4507,8 @@ static CXLRetCode cmd_fm_initiate_dc_add(const struct cxl_cmd *cmd,
                                                           NULL, NULL,
                                                           ext->start_dpa,
                                                           ext->len, ext->tag,
-                                                          ext->shared_seq, 0);
+                                                          ext->shared_seq, 0,
+                                                          (uint64_t)-1);
             }
 
             cxl_extent_group_list_insert_tail(&ct3d->dc.extents_pending, group);

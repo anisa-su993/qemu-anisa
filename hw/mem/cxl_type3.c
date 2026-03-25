@@ -2542,7 +2542,8 @@ static void qmp_cxl_process_dynamic_capacity_prescriptive(const char *path,
                                                           extents[i].len,
                                                           extents[i].tag,
                                                           extents[i].shared_seq,
-                                                          rid);
+                                                          rid,
+                                                          offset);
             } else {
                 group = cxl_insert_extent_to_extent_group(group,
                                                           dcd->dc.host_dc,
@@ -2551,7 +2552,8 @@ static void qmp_cxl_process_dynamic_capacity_prescriptive(const char *path,
                                                           extents[i].len,
                                                           extents[i].tag,
                                                           extents[i].shared_seq,
-                                                          rid);
+                                                          rid,
+                                                          offset);
             }
         }
 

@@ -688,6 +688,7 @@ typedef struct CXLMemSparingWriteAttrs {
 #define CXL_MEMDEV_SOFT_SPARING_SUPPORT_FLAG    BIT(2)
 
 #define DCD_MAX_NUM_REGION 8
+#define CXL_DC_MAX_DIRECT_MR 4
 
 typedef struct CXLDCExtentRaw {
     uint64_t start_dpa;
@@ -706,6 +707,7 @@ typedef struct CXLDCExtent {
     uint16_t shared_seq;
     uint8_t rsvd[0x6];
     int rid;
+    uint64_t offset;
 
     QTAILQ_ENTRY(CXLDCExtent) node;
 } CXLDCExtent;
@@ -790,6 +792,7 @@ struct CXLType3Dev {
     /* State */
     MemoryRegion direct_mr[CXL_HDM_DECODER_COUNT];
     CXLFixedWindow *direct_mr_fw[CXL_HDM_DECODER_COUNT];
+    bool direct_mr_enabled;
     AddressSpace hostvmem_as;
     AddressSpace hostpmem_as;
     CXLComponentState cxl_cstate;
@@ -856,6 +859,14 @@ struct CXLType3Dev {
         HostMemoryBackend *host_dc;
         AddressSpace host_dc_as;
         struct CXLFixedWindow *fw;
+        uint32_t direct_mr_bitmap;
+        /*
+         * dc_decoder_window represents the CXL Decoder Window
+         */
+        struct decoder_window {
+            hwaddr base;
+            hwaddr size;
+        } dc_decoder_window;
         /*
          * total_capacity is equivalent to the dynamic capability
          * memory region size.
@@ -870,6 +881,7 @@ struct CXLType3Dev {
 
         uint8_t num_regions; /* 0-8 regions */
         CXLDCRegion regions[DCD_MAX_NUM_REGION];
+        MemoryRegion dc_direct_mr[CXL_DC_MAX_DIRECT_MR];
     } dc;
 
     struct CXLSanitizeInfo *media_op_sanitize;
@@ -960,7 +972,8 @@ void cxl_insert_extent_to_extent_list(CXLDCExtentList *list,
                                       uint64_t len,
                                       uint8_t *tag,
                                       uint16_t shared_seq,
-                                      int rid);
+                                      int rid,
+                                      uint64_t offset);
 bool test_any_bits_set(const unsigned long *addr, unsigned long nr,
                        unsigned long size);
 bool cxl_extents_contains_dpa_range(CXLDCExtentList *list,
@@ -972,7 +985,8 @@ CXLDCExtentGroup *cxl_insert_extent_to_extent_group(CXLDCExtentGroup *group,
                                                     uint64_t len,
                                                     uint8_t *tag,
                                                     uint16_t shared_seq,
-                                                    int rid);
+                                                    int rid,
+                                                    uint64_t offset);
 void cxl_extent_group_list_insert_tail(CXLDCExtentGroupList *list,
                                        CXLDCExtentGroup *group);
 uint32_t cxl_extent_group_list_delete_front(CXLDCExtentGroupList *list);
