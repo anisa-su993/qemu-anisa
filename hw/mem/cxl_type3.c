@@ -2713,6 +2713,91 @@ void cxl_remove_memory_alias(CXLType3Dev *dcd, struct CXLFixedWindow *fw,
     dcd->dc.direct_mr_bitmap &= ~(1u << hdm_id);
 }
 
+/*
+ * This function allows for a simple check to make sure that
+ * our extent is removed. It can be used by an orchestration layer.
+ */
+ExtentStatus *
+qmp_cxl_release_dynamic_capacity_status(const char *path,
+                                        uint16_t hid, uint8_t rid,
+                                        const char *tag,
+                                        Error **errp)
+{
+    Object *obj;
+    CXLType3Dev *dcd;
+    CXLDCExtentList *list = NULL;
+    CXLDCExtent *ent;
+    QemuUUID uuid_req;
+    ExtentStatus *res;
+
+    obj = object_resolve_path_type(path, TYPE_CXL_TYPE3, NULL);
+    if (!obj) {
+        error_setg(errp, "Unable to resolve CXL type 3 device");
+        return NULL;
+    }
+
+    dcd = CXL_TYPE3(obj);
+    if (!dcd->dc.num_regions) {
+        error_setg(errp, "No dynamic capacity support from the device");
+        return NULL;
+    }
+
+    if (rid >= dcd->dc.num_regions) {
+        error_setg(errp, "Region id is too large");
+        return NULL;
+    }
+
+    if (!tag) {
+        error_setg(errp, "Tag must be valid");
+        return NULL;
+    }
+
+    list = &dcd->dc.extents;
+    qemu_uuid_parse(tag, &uuid_req);
+    res = g_new0(ExtentStatus, 1);
+
+    /* Check committed extents */
+    QTAILQ_FOREACH(ent, list, node) {
+        QemuUUID uuid_ext;
+        g_autofree char *uuid_str = NULL;
+        memcpy(&uuid_ext.data, ent->tag, sizeof(ent->tag));
+        if (qemu_uuid_is_equal(&uuid_req, &uuid_ext)) {
+            uuid_str = qemu_uuid_unparse_strdup(&uuid_ext);
+            res->status = g_strdup("Committed");
+            res->message =
+                g_strdup_printf("Found committed extent with tag %s dpa 0x%"
+                                PRIx64 " len 0x%" PRIx64,
+                                uuid_str, ent->start_dpa, ent->len);
+            return res;
+        }
+    }
+
+    /* Check pending extents (not yet committed by kernel) */
+    {
+        CXLDCExtentGroup *group;
+        QTAILQ_FOREACH(group, &dcd->dc.extents_pending, node) {
+            QTAILQ_FOREACH(ent, &group->list, node) {
+                QemuUUID uuid_ext;
+                g_autofree char *uuid_str = NULL;
+                memcpy(&uuid_ext.data, ent->tag, sizeof(ent->tag));
+                if (qemu_uuid_is_equal(&uuid_req, &uuid_ext)) {
+                    uuid_str = qemu_uuid_unparse_strdup(&uuid_ext);
+                    res->status = g_strdup("Pending");
+                    res->message =
+                        g_strdup_printf("Found pending extent with tag %s"
+                                        " dpa 0x%" PRIx64 " len 0x%" PRIx64,
+                                        uuid_str, ent->start_dpa, ent->len);
+                    return res;
+                }
+            }
+        }
+    }
+
+    res->status = g_strdup("Released");
+    res->message = g_strdup_printf("Tag %s released or not found", tag);
+    return res;
+}
+
 static void ct3_class_init(ObjectClass *oc, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(oc);

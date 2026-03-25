@@ -127,3 +127,13 @@ void qmp_cxl_release_dynamic_capacity(const char *path, uint16_t host_id,
 {
     error_setg(errp, "CXL Type 3 support is not compiled in");
 }
+
+ExtentStatus *qmp_cxl_release_dynamic_capacity_status(const char *path,
+                                                      uint16_t host_id,
+                                                      uint8_t region,
+                                                      const char *tag,
+                                                      Error **errp)
+{
+    error_setg(errp, "CXL Type 3 support is not compiled in");
+    return NULL;
+}
