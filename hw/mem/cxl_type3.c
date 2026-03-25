@@ -195,12 +195,15 @@ static int ct3_build_cdat_table(CDATSubHeader ***cdat_table, void *priv)
     }
 
     if (ct3d->dc.num_regions) {
-        if (!ct3d->dc.host_dc) {
-            return -EINVAL;
-        }
-        dc_mr = host_memory_backend_get_memory(ct3d->dc.host_dc);
-        if (!dc_mr) {
-            return -EINVAL;
+        /* Only check if DC is static (has a backing device) */
+        if (ct3d->dc.total_capacity_cmd == 0) {
+            if (!ct3d->dc.host_dc) {
+                return -EINVAL;
+            }
+            dc_mr = host_memory_backend_get_memory(ct3d->dc.host_dc);
+            if (!dc_mr) {
+                return -EINVAL;
+            }
         }
         len += CT3_CDAT_NUM_ENTRIES * ct3d->dc.num_regions;
     }
@@ -221,7 +224,7 @@ static int ct3_build_cdat_table(CDATSubHeader ***cdat_table, void *priv)
         cur_ent += CT3_CDAT_NUM_ENTRIES;
     }
 
-    if (dc_mr) {
+    if (dc_mr || ct3d->dc.total_capacity_cmd) {
         int i;
         uint64_t region_base = vmr_size + pmr_size;
 
@@ -758,8 +761,12 @@ static bool cxl_create_dc_regions(CXLType3Dev *ct3d, Error **errp)
     MemoryRegion *mr;
     uint64_t dc_size;
 
-    mr = host_memory_backend_get_memory(ct3d->dc.host_dc);
-    dc_size = memory_region_size(mr);
+    if (ct3d->dc.total_capacity_cmd != 0) {
+        dc_size = ct3d->dc.total_capacity_cmd;
+    } else {
+        mr = host_memory_backend_get_memory(ct3d->dc.host_dc);
+        dc_size = memory_region_size(mr);
+    }
     region_len = DIV_ROUND_UP(dc_size, ct3d->dc.num_regions);
 
     if (dc_size % (ct3d->dc.num_regions * CXL_CAPACITY_MULTIPLIER) != 0) {
@@ -930,36 +937,41 @@ static bool cxl_setup_memory(CXLType3Dev *ct3d, Error **errp)
         MemoryRegion *dc_mr;
         char *dc_name;
 
-        if (!ct3d->dc.host_dc) {
-            error_setg(errp, "dynamic capacity must have a backing device");
-            return false;
-        }
+        /* Only require backing device if total_capacity_cmd is zero */
+        if (ct3d->dc.total_capacity_cmd == 0) {
+            if (!ct3d->dc.host_dc) {
+                error_setg(errp, "dynamic capacity must have a backing device");
+                return false;
+            }
 
-        dc_mr = host_memory_backend_get_memory(ct3d->dc.host_dc);
-        if (!dc_mr) {
-            error_setg(errp, "dynamic capacity must have a backing device");
-            return false;
-        }
+            dc_mr = host_memory_backend_get_memory(ct3d->dc.host_dc);
+            if (!dc_mr) {
+                error_setg(errp, "dynamic capacity must have a backing device");
+                return false;
+            }
 
-        if (host_memory_backend_is_mapped(ct3d->dc.host_dc)) {
-            error_setg(errp, "memory backend %s can't be used multiple times.",
-               object_get_canonical_path_component(OBJECT(ct3d->dc.host_dc)));
-            return false;
+            if (host_memory_backend_is_mapped(ct3d->dc.host_dc)) {
+                error_setg(errp,
+                           "memory backend %s can't be used multiple times.",
+                           object_get_canonical_path_component(
+                               OBJECT(ct3d->dc.host_dc)));
+                return false;
+            }
+            /*
+             * Set DC regions as volatile for now, non-volatile support can
+             * be added in the future if needed.
+             */
+            memory_region_set_nonvolatile(dc_mr, false);
+            memory_region_set_enabled(dc_mr, true);
+            host_memory_backend_set_mapped(ct3d->dc.host_dc, true);
+            if (ds->id) {
+                dc_name = g_strdup_printf("cxl-dcd-dpa-dc-space:%s", ds->id);
+            } else {
+                dc_name = g_strdup("cxl-dcd-dpa-dc-space");
+            }
+            address_space_init(&ct3d->dc.host_dc_as, dc_mr, dc_name);
+            g_free(dc_name);
         }
-        /*
-         * Set DC regions as volatile for now, non-volatile support can
-         * be added in the future if needed.
-         */
-        memory_region_set_nonvolatile(dc_mr, false);
-        memory_region_set_enabled(dc_mr, true);
-        host_memory_backend_set_mapped(ct3d->dc.host_dc, true);
-        if (ds->id) {
-            dc_name = g_strdup_printf("cxl-dcd-dpa-dc-space:%s", ds->id);
-        } else {
-            dc_name = g_strdup("cxl-dcd-dpa-dc-space");
-        }
-        address_space_init(&ct3d->dc.host_dc_as, dc_mr, dc_name);
-        g_free(dc_name);
 
         if (!cxl_create_dc_regions(ct3d, errp)) {
             error_append_hint(errp, "setup DC regions failed");
@@ -1434,6 +1446,8 @@ static const Property ct3_props[] = {
     DEFINE_PROP_UINT8("num-dc-regions", CXLType3Dev, dc.num_regions, 0),
     DEFINE_PROP_LINK("volatile-dc-memdev", CXLType3Dev, dc.host_dc,
                      TYPE_MEMORY_BACKEND, HostMemoryBackend *),
+    DEFINE_PROP_SIZE("dc-regions-total-size", CXLType3Dev,
+                     dc.total_capacity_cmd, 0),
     DEFINE_PROP_PCIE_LINK_SPEED("x-speed", CXLType3Dev,
                                 speed, PCIE_LINK_SPEED_32),
     DEFINE_PROP_PCIE_LINK_WIDTH("x-width", CXLType3Dev,
@@ -2376,6 +2390,12 @@ static void qmp_cxl_process_dynamic_capacity_prescriptive(const char *path,
         return;
     }
 
+    if (dcd->dc.total_capacity_cmd) {
+        error_setg(errp,
+                   "dc-regions-total-size is set: extent add/release via QMP "
+                   "not yet supported without a backing device at init");
+        return;
+    }
 
     if (rid >= dcd->dc.num_regions) {
         error_setg(errp, "region id is too large");

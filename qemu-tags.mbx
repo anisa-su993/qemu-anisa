@@ -1,0 +1,3371 @@
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Received: from frasgout.his.huawei.com (frasgout.his.huawei.com [185.176.79.56])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id E236842A80
+	for <linux-cxl@vger.kernel.org>; Fri, 27 Mar 2026 15:18:26 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=185.176.79.56
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1774624709; cv=none; b=fgM+DLpawc4yZWkwnxrrZp3mw1JLnEuy038PXzpohazO83ZY6HzZMGqfr+PSSCBM9t23z8P129kzyYvMWiMU2cfSphfgVnR9nG/T9VrgTSeTFI6Kl9IqGdl7tGxYdJZc283wlF9EF7MutsXWht5XpsnQBOlEy2W6IGr8DTSMTsA=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1774624709; c=relaxed/simple;
+	bh=lMHOwVjXWi8E80e8fHlqNr+wX9en/ytbJ8Nc2KHyGLY=;
+	h=Date:From:To:CC:Subject:Message-ID:In-Reply-To:References:
+	 MIME-Version:Content-Type; b=cmEohhDXNGpU6elErvhrM2ED5nbtmuap4FDTNUKin8FoyBxmAu2VIC5ANVoFt/TDBHcP7VXZveHt86soolOouv1EBSfj3LYiHtRZAgbiuhYQfvkG8VO8kaTqvIg15XvLNxPx6Nhaq9HqRcOeseX5BOeQ39CY/IFfqDZf+Wi6Opw=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com; spf=pass smtp.mailfrom=huawei.com; arc=none smtp.client-ip=185.176.79.56
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=huawei.com
+Received: from mail.maildlp.com (unknown [172.18.224.83])
+	by frasgout.his.huawei.com (SkyGuard) with ESMTPS id 4fj45p1HzJzJ46Bp;
+	Fri, 27 Mar 2026 23:18:06 +0800 (CST)
+Received: from dubpeml500005.china.huawei.com (unknown [7.214.145.207])
+	by mail.maildlp.com (Postfix) with ESMTPS id 30FA640577;
+	Fri, 27 Mar 2026 23:18:18 +0800 (CST)
+Received: from localhost (10.203.177.99) by dubpeml500005.china.huawei.com
+ (7.214.145.207) with Microsoft SMTP Server (version=TLS1_2,
+ cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.2.1544.11; Fri, 27 Mar
+ 2026 15:18:17 +0000
+Date: Fri, 27 Mar 2026 15:18:11 +0000
+From: Alireza Sanaee <alireza.sanaee@huawei.com>
+To: Markus Armbruster <armbru@redhat.com>
+CC: <qemu-devel@nongnu.org>, <anisa.su@samsung.com>, <berrange@redhat.com>,
+	<eblake@redhat.com>, <jonathan.cameron@huawei.com>,
+	<linux-cxl@vger.kernel.org>, <linuxarm@huawei.com>, <lizhijian@fujitsu.com>,
+	<mst@redhat.com>, <pbonzini@redhat.com>, <gourry@gourry.net>,
+	<nifan.cxl@gmail.com>, <me@linux.beauty>
+Subject: Re: [PATCH 9/9] hw/cxl: Add QMP status query for dynamic-capacity
+ extent release
+Message-ID: <20260327151811.00005564.alireza.sanaee@huawei.com>
+In-Reply-To: <87mrzuei5f.fsf@pond.sub.org>
+References: <20260325184259.366-1-alireza.sanaee@huawei.com>
+	<20260325184259.366-10-alireza.sanaee@huawei.com>
+	<87mrzuei5f.fsf@pond.sub.org>
+Organization: Huawei
+X-Mailer: Claws Mail 4.3.0 (GTK 3.24.42; x86_64-w64-mingw32)
+Precedence: bulk
+X-Mailing-List: linux-cxl@vger.kernel.org
+List-Id: <linux-cxl.vger.kernel.org>
+List-Subscribe: <mailto:linux-cxl+subscribe@vger.kernel.org>
+List-Unsubscribe: <mailto:linux-cxl+unsubscribe@vger.kernel.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="US-ASCII"
+Content-Transfer-Encoding: 7bit
+X-ClientProxiedBy: lhrpeml500009.china.huawei.com (7.191.174.84) To
+ dubpeml500005.china.huawei.com (7.214.145.207)
+
+On Thu, 26 Mar 2026 16:15:40 +0100
+Markus Armbruster <armbru@redhat.com> wrote:
+
+Hi Markus,
+
+This commit adds a test command to check whether an extent (a piece of memory region) has been released or not by the guest.
+The process of removal is highly asynchronous, that's why I needed to add a new command to check it.
+
+I would be happy to drop this patch, as this is extra.
+
+Thanks,
+Ali
+
+> I'm a near-complete CXL ignoramus, and beg your patience.
+> 
+> Alireza Sanaee <alireza.sanaee@huawei.com> writes:
+> 
+> > Add a small status query so orchestration layers can check whether a tagged
+> > extent is still pending, committed, or no longer present after a release
+> > request.  
+> 
+> Why would they want to check?
+> 
+> What is a "release request"?
+> 
+> >
+> > Introduce the ExtentStatus QAPI struct and the
+> > cxl-release-dynamic-capacity-status command.
+> >
+> > Signed-off-by: Alireza Sanaee <alireza.sanaee@huawei.com>  
+> 
+> [...]
+> 
+> > diff --git a/qapi/cxl.json b/qapi/cxl.json
+> > index 81d6198ba0..53325ba530 100644
+> > --- a/qapi/cxl.json
+> > +++ b/qapi/cxl.json
+> > @@ -636,3 +636,49 @@
+> >             },
+> >    'features': [ 'unstable' ]
+> >  }
+> > +
+> > +##
+> > +# @ExtentStatus:  
+> 
+> Blank line here, please.
+> 
+> > +# This is an object that describes the status of an extent.
+> > +#
+> > +# @status:   String indicating the overall result, e.g. "success".  
+> 
+> What are the possible values?  Are they defined in some spec?
+> 
+> > +# @message:  Human-readable description of the outcome.  
+> 
+> Intended use?
+> 
+> > +#
+> > +# Since: 9.1  
+> 
+> 11.1 most likely.
+> 
+> > +##
+> > +{ 'struct': 'ExtentStatus',
+> > +      'data': { 'status': 'str', 'message': 'str' }
+> > +}
+> > +
+> > +##
+> > +# @cxl-release-dynamic-capacity-status:
+> > +#
+> > +# This commands checks if an extent tag has been released or not.  
+> 
+> Use imperative mood to describe commands: "Check whether an extent tag
+> has been released."
+> 
+> > +#
+> > +# @path: path to the CXL Dynamic Capacity Device in the QOM tree.  
+> 
+> We commonly call such members @qom-path.
+> 
+> > +#
+> > +# @host-id: The "Host ID" field as defined in Compute Express Link
+> > +#     (CXL) Specification, Revision 3.1, Table 7-71.
+> > +#
+> > +# @region: The "Region Number" field as defined in Compute Express
+> > +#     Link Specification, Revision 3.1, Table 7-71.  Valid range
+> > +#     is from 0-7.
+> > +#
+> > +# @tag: The "Tag" field as defined in Compute Express Link (CXL)
+> > +#     Specification, Revision 3.1, Table 7-71.  
+> 
+> I guess the command interrogates something called "extent", and the
+> something is related to the CXL device at @path in the QOM tree.
+> Correct?
+> 
+> How is it related?  Is it a part of the device?
+> 
+> I further guess multiple extends can be so related, and @host-id,
+> @region, and @tag identify select the one we want to interrogate.
+> Correct?
+> 
+> > +#
+> > +# Features:
+> > +#
+> > +# @unstable: For now this command is subject to change.  
+> 
+> The conventional language is "This command is experimental."
+> 
+> > +#
+> > +# Since: 9.1  
+> 
+> 11.1 most likely.
+> 
+> > +##
+> > +{ 'command': 'cxl-release-dynamic-capacity-status',
+> > +  'data': { 'path': 'str',
+> > +            'host-id': 'uint16',
+> > +            'region': 'uint8',
+> > +            'tag': 'str'
+> > +          },
+> > +  'features': [ 'unstable' ],
+> > +  'returns': 'ExtentStatus'  
+> 
+> Swap these two lines, please.
+> 
+> > +}  
+> 
+> 
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Received: from us-smtp-delivery-124.mimecast.com (us-smtp-delivery-124.mimecast.com [170.10.133.124])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 5D576391838
+	for <linux-cxl@vger.kernel.org>; Thu, 26 Mar 2026 15:15:50 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=170.10.133.124
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1774538152; cv=none; b=MrsWcdOlrTPKl3XNJxsqKPB3uNBeCUlaIQdfffSPKifwBGzhpRneBrWO4Pgg2jHc8TDhZ2FkiNQdOoxu0IgN+uaix8pgoSZrcThd4PKchTrQgLMwxV3QMGv5eKJ1Peyr8/BmcxscM9GlPBiNBHjU1dqWqTFFN1BHIuJbdIDrLeQ=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1774538152; c=relaxed/simple;
+	bh=PE9Xm9YaJcVXYL6P8d7ga1shjgBHydXIAq6yxZMVaD0=;
+	h=From:To:Cc:Subject:In-Reply-To:References:Date:Message-ID:
+	 MIME-Version:Content-Type; b=DI+GC+q8cemxcoSMYczBtTuZ1NDZ24Pssfpl3edp2y23/bUY7RJCNepu9rvg831r4zEPxC2YDglvx8bWHQ2BNSW6Cvm2ISfDF6nuqjsKm3LlODNnipO6BXjWCMJFlr6Je8tMONCXkV2MO5OB3L3x7bR2G1q4Krw1on0wnsuYKH8=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=redhat.com; spf=pass smtp.mailfrom=redhat.com; dkim=pass (1024-bit key) header.d=redhat.com header.i=@redhat.com header.b=HIuMX1Vq; arc=none smtp.client-ip=170.10.133.124
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=redhat.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=redhat.com
+Authentication-Results: smtp.subspace.kernel.org;
+	dkim=pass (1024-bit key) header.d=redhat.com header.i=@redhat.com header.b="HIuMX1Vq"
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=redhat.com;
+	s=mimecast20190719; t=1774538149;
+	h=from:from:reply-to:subject:subject:date:date:message-id:message-id:
+	 to:to:cc:cc:mime-version:mime-version:content-type:content-type:
+	 in-reply-to:in-reply-to:references:references;
+	bh=vzpehDqYgCyCogpznJ1yRYvkvpNP6+3YYzUqRgqyluU=;
+	b=HIuMX1VqhAHkE72CYeoVkSdXKpMuhl+zslj9tCeVO1DWib9V/vNRfuSnZtf2MaQ35ncHhb
+	IyfC0H9047jwKHpCyPI3sjCSARyh/8tyo1wy8eKBvqZhFHo6TZ0Fw3KyZ9Mv49g2Y+k0jr
+	DuLA8DmzCJJkC2oW0Muev5u75gs5/b0=
+Received: from mx-prod-mc-03.mail-002.prod.us-west-2.aws.redhat.com
+ (ec2-54-186-198-63.us-west-2.compute.amazonaws.com [54.186.198.63]) by
+ relay.mimecast.com with ESMTP with STARTTLS (version=TLSv1.3,
+ cipher=TLS_AES_256_GCM_SHA384) id us-mta-348-dVAnXoqzMDWhQysiOPlhcw-1; Thu,
+ 26 Mar 2026 11:15:46 -0400
+X-MC-Unique: dVAnXoqzMDWhQysiOPlhcw-1
+X-Mimecast-MFC-AGG-ID: dVAnXoqzMDWhQysiOPlhcw_1774538145
+Received: from mx-prod-int-05.mail-002.prod.us-west-2.aws.redhat.com (mx-prod-int-05.mail-002.prod.us-west-2.aws.redhat.com [10.30.177.17])
+	(using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)
+	 key-exchange X25519 server-signature RSA-PSS (2048 bits) server-digest SHA256)
+	(No client certificate requested)
+	by mx-prod-mc-03.mail-002.prod.us-west-2.aws.redhat.com (Postfix) with ESMTPS id EEABB1956048;
+	Thu, 26 Mar 2026 15:15:43 +0000 (UTC)
+Received: from blackfin.pond.sub.org (unknown [10.45.242.6])
+	by mx-prod-int-05.mail-002.prod.us-west-2.aws.redhat.com (Postfix) with ESMTPS id 085F31955D84;
+	Thu, 26 Mar 2026 15:15:42 +0000 (UTC)
+Received: by blackfin.pond.sub.org (Postfix, from userid 1000)
+	id 952BA21E6937; Thu, 26 Mar 2026 16:15:40 +0100 (CET)
+From: Markus Armbruster <armbru@redhat.com>
+To: Alireza Sanaee <alireza.sanaee@huawei.com>
+Cc: <qemu-devel@nongnu.org>,  <anisa.su@samsung.com>,
+  <berrange@redhat.com>,  <eblake@redhat.com>,
+  <jonathan.cameron@huawei.com>,  <linux-cxl@vger.kernel.org>,
+  <linuxarm@huawei.com>,  <lizhijian@fujitsu.com>,  <mst@redhat.com>,
+  <pbonzini@redhat.com>,  <gourry@gourry.net>,  <nifan.cxl@gmail.com>,
+  <me@linux.beauty>
+Subject: Re: [PATCH 9/9] hw/cxl: Add QMP status query for dynamic-capacity
+ extent release
+In-Reply-To: <20260325184259.366-10-alireza.sanaee@huawei.com> (Alireza
+	Sanaee's message of "Wed, 25 Mar 2026 18:42:57 +0000")
+References: <20260325184259.366-1-alireza.sanaee@huawei.com>
+	<20260325184259.366-10-alireza.sanaee@huawei.com>
+Date: Thu, 26 Mar 2026 16:15:40 +0100
+Message-ID: <87mrzuei5f.fsf@pond.sub.org>
+User-Agent: Gnus/5.13 (Gnus v5.13)
+Precedence: bulk
+X-Mailing-List: linux-cxl@vger.kernel.org
+List-Id: <linux-cxl.vger.kernel.org>
+List-Subscribe: <mailto:linux-cxl+subscribe@vger.kernel.org>
+List-Unsubscribe: <mailto:linux-cxl+unsubscribe@vger.kernel.org>
+MIME-Version: 1.0
+X-Scanned-By: MIMEDefang 3.0 on 10.30.177.17
+X-Mimecast-MFC-PROC-ID: rpfbegNFT8SVP7xFBQMK_8v5T2XSV3oiyelsvt5wSQ8_1774538145
+X-Mimecast-Originator: redhat.com
+Content-Type: text/plain
+
+I'm a near-complete CXL ignoramus, and beg your patience.
+
+Alireza Sanaee <alireza.sanaee@huawei.com> writes:
+
+> Add a small status query so orchestration layers can check whether a tagged
+> extent is still pending, committed, or no longer present after a release
+> request.
+
+Why would they want to check?
+
+What is a "release request"?
+
+>
+> Introduce the ExtentStatus QAPI struct and the
+> cxl-release-dynamic-capacity-status command.
+>
+> Signed-off-by: Alireza Sanaee <alireza.sanaee@huawei.com>
+
+[...]
+
+> diff --git a/qapi/cxl.json b/qapi/cxl.json
+> index 81d6198ba0..53325ba530 100644
+> --- a/qapi/cxl.json
+> +++ b/qapi/cxl.json
+> @@ -636,3 +636,49 @@
+>             },
+>    'features': [ 'unstable' ]
+>  }
+> +
+> +##
+> +# @ExtentStatus:
+
+Blank line here, please.
+
+> +# This is an object that describes the status of an extent.
+> +#
+> +# @status:   String indicating the overall result, e.g. "success".
+
+What are the possible values?  Are they defined in some spec?
+
+> +# @message:  Human-readable description of the outcome.
+
+Intended use?
+
+> +#
+> +# Since: 9.1
+
+11.1 most likely.
+
+> +##
+> +{ 'struct': 'ExtentStatus',
+> +      'data': { 'status': 'str', 'message': 'str' }
+> +}
+> +
+> +##
+> +# @cxl-release-dynamic-capacity-status:
+> +#
+> +# This commands checks if an extent tag has been released or not.
+
+Use imperative mood to describe commands: "Check whether an extent tag
+has been released."
+
+> +#
+> +# @path: path to the CXL Dynamic Capacity Device in the QOM tree.
+
+We commonly call such members @qom-path.
+
+> +#
+> +# @host-id: The "Host ID" field as defined in Compute Express Link
+> +#     (CXL) Specification, Revision 3.1, Table 7-71.
+> +#
+> +# @region: The "Region Number" field as defined in Compute Express
+> +#     Link Specification, Revision 3.1, Table 7-71.  Valid range
+> +#     is from 0-7.
+> +#
+> +# @tag: The "Tag" field as defined in Compute Express Link (CXL)
+> +#     Specification, Revision 3.1, Table 7-71.
+
+I guess the command interrogates something called "extent", and the
+something is related to the CXL device at @path in the QOM tree.
+Correct?
+
+How is it related?  Is it a part of the device?
+
+I further guess multiple extends can be so related, and @host-id,
+@region, and @tag identify select the one we want to interrogate.
+Correct?
+
+> +#
+> +# Features:
+> +#
+> +# @unstable: For now this command is subject to change.
+
+The conventional language is "This command is experimental."
+
+> +#
+> +# Since: 9.1
+
+11.1 most likely.
+
+> +##
+> +{ 'command': 'cxl-release-dynamic-capacity-status',
+> +  'data': { 'path': 'str',
+> +            'host-id': 'uint16',
+> +            'region': 'uint8',
+> +            'tag': 'str'
+> +          },
+> +  'features': [ 'unstable' ],
+> +  'returns': 'ExtentStatus'
+
+Swap these two lines, please.
+
+> +}
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Received: from frasgout.his.huawei.com (frasgout.his.huawei.com [185.176.79.56])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 8D0932750ED
+	for <linux-cxl@vger.kernel.org>; Thu, 26 Mar 2026 13:04:17 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=185.176.79.56
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1774530260; cv=none; b=IPPxe02tRIvvg3hFdIpmmNQgEoKX4+kQqTLIxSVUu8L4HvGoWJItP1BuEcrNL/ls40L+oOcHlTCuvAPtYAglKZxQNiubThJj2ez3hbO/sFDfVZ2XCxU9ucr7dkBdC7DCT5Pr2WYPSvR7skKY0DtqiwQq8gvTDMoKSkv8AvhTNlg=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1774530260; c=relaxed/simple;
+	bh=J/XjkfMjnAy2SFGiYC0w1DPdQZB3CJ1L8BPZM+RZfCo=;
+	h=Date:From:To:CC:Subject:Message-ID:In-Reply-To:References:
+	 MIME-Version:Content-Type; b=qY2pasQl84mGE0SgfKYxRP5NMemE3K8699/69Alb4zVbL82yLx5LJPGHtAUEMns4gCvVNHgSB45EIIXQbUfJpRUX7GfOv6hch0G9Lc+pCcNZtqQ8swgtq9NTsPKCJxxXH9Vr/lVRbvnkBLCbxvYFFkU9iP61C9hkz02jnOfZKaQ=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com; spf=pass smtp.mailfrom=huawei.com; arc=none smtp.client-ip=185.176.79.56
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=huawei.com
+Received: from mail.maildlp.com (unknown [172.18.224.150])
+	by frasgout.his.huawei.com (SkyGuard) with ESMTPS id 4fhP9465qdzHnGhq;
+	Thu, 26 Mar 2026 21:03:36 +0800 (CST)
+Received: from dubpeml500005.china.huawei.com (unknown [7.214.145.207])
+	by mail.maildlp.com (Postfix) with ESMTPS id 33EC64056E;
+	Thu, 26 Mar 2026 21:04:14 +0800 (CST)
+Received: from localhost (10.203.177.99) by dubpeml500005.china.huawei.com
+ (7.214.145.207) with Microsoft SMTP Server (version=TLS1_2,
+ cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.2.1544.11; Thu, 26 Mar
+ 2026 13:04:13 +0000
+Date: Thu, 26 Mar 2026 13:04:09 +0000
+From: Alireza Sanaee <alireza.sanaee@huawei.com>
+To: Markus Armbruster <armbru@redhat.com>
+CC: <qemu-devel@nongnu.org>, <anisa.su@samsung.com>, <berrange@redhat.com>,
+	<eblake@redhat.com>, <jonathan.cameron@huawei.com>,
+	<linux-cxl@vger.kernel.org>, <linuxarm@huawei.com>, <lizhijian@fujitsu.com>,
+	<mst@redhat.com>, <pbonzini@redhat.com>, <gourry@gourry.net>,
+	<nifan.cxl@gmail.com>, <me@linux.beauty>
+Subject: Re: [PATCH 1/9] hw/mem: Add tag support to generic host memory
+ backends
+Message-ID: <20260326130409.0000405b.alireza.sanaee@huawei.com>
+In-Reply-To: <87bjgag2y5.fsf@pond.sub.org>
+References: <20260325184259.366-1-alireza.sanaee@huawei.com>
+	<20260325184259.366-2-alireza.sanaee@huawei.com>
+	<87a4vuhnxy.fsf@pond.sub.org>
+	<20260326112921.000028e6.alireza.sanaee@huawei.com>
+	<87bjgag2y5.fsf@pond.sub.org>
+Organization: Huawei
+X-Mailer: Claws Mail 4.3.0 (GTK 3.24.42; x86_64-w64-mingw32)
+Precedence: bulk
+X-Mailing-List: linux-cxl@vger.kernel.org
+List-Id: <linux-cxl.vger.kernel.org>
+List-Subscribe: <mailto:linux-cxl+subscribe@vger.kernel.org>
+List-Unsubscribe: <mailto:linux-cxl+unsubscribe@vger.kernel.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="US-ASCII"
+Content-Transfer-Encoding: 7bit
+X-ClientProxiedBy: lhrpeml100009.china.huawei.com (7.191.174.83) To
+ dubpeml500005.china.huawei.com (7.214.145.207)
+
+On Thu, 26 Mar 2026 14:01:06 +0100
+Markus Armbruster <armbru@redhat.com> wrote:
+
+Hi Markus,
+
+Sure, absolutely.
+> Alireza Sanaee <alireza.sanaee@huawei.com> writes:
+> 
+> > On Thu, 26 Mar 2026 11:42:17 +0100
+> > Markus Armbruster <armbru@redhat.com> wrote:
+> >
+> > Hi Markus,
+> >  
+> >> Alireza Sanaee <alireza.sanaee@huawei.com> writes:
+> >>   
+> >> > Add a string tag property to HostMemoryBackend so that backends can be
+> >> > identified by a user-assigned name at runtime. Expose the property through
+> >> > QOM and add a host_memory_backend_find_by_tag() helper that walks the
+> >> > object tree to locate a backend by its tag.    
+> >> 
+> >> Why can't you use the QOM ID?
+> >> 
+> >> $ qemu-system-x86_64 -S -display none -monitor stdio -object memory-backend-ram,id=fred,size=1M
+> >> QEMU 10.2.90 monitor - type 'help' for more information
+> >> (qemu) info qom-tree /objects/fred
+> >> /fred (memory-backend-ram)
+> >>   /fred[0] (memory-region)
+> >> 
+> >>    
+> >
+> > Fair question. The ID would have been a solution if it had accepted GUIDs. CXL spec 
+> > requires GUIDs for extents as identification, hence new tag property.  
+> 
+> Your commit message should state that this needs to be a GUID and why.
+> 
+> > alireza@blue-ocean:~/Downloads$ qemu-system-x86_64 -s -display none -monitor std
+> > io -object memory-backend-ram,id=02bb2436-e87d-4aa1-b2be-aaffdd76bb79,size=1M
+> > qemu-system-x86_64: -object memory-backend-ram,id=02bb2436-e87d-4aa1-b2be-aaffdd
+> > 76bb79,size=1M: Parameter 'id' expects an identifier
+> > Identifiers consist of letters, digits, '-', '.', '_', starting with a letter.
+> >
+> > Thanks,
+> > Ali  
+> 
+> 
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Received: from us-smtp-delivery-124.mimecast.com (us-smtp-delivery-124.mimecast.com [170.10.129.124])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 758A22848A7
+	for <linux-cxl@vger.kernel.org>; Thu, 26 Mar 2026 13:01:23 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=170.10.129.124
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1774530085; cv=none; b=Z9TjYUQv0FH/WeKBaHmvEclQ51vo32h60+a8YIWC7fFDTn1uoRKLOSVpTnXkyhnb7Ok4WiOUhYfCigLTk8WXgpuSzUPPgKlDDpYCyY2B+HZO5HyCDIWo6HoPCEk5zRNPywWhrfl75+Jflc3mCm6WxZSUl2d9Xr2oFEpubZvHjPU=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1774530085; c=relaxed/simple;
+	bh=JtfRI+SGda94ltJQL8u/sOjJTSX26NJ6vN3Uql6fp98=;
+	h=From:To:Cc:Subject:In-Reply-To:References:Date:Message-ID:
+	 MIME-Version:Content-Type; b=YsCFGYSf0zmxc8mIMmUWVnTnZfUlIkCq/1SImSaB+KddX6qSRd3Afz+Zzw2YCNp+HcfcQ8EhjfhsE0trE50iiV1STLO3w0FltTZMOhmzbbiXzhsZLAVsgDNFYO6h8xU4AmmY4Qse69/2QDkYf5VhxyezL6cPZbPE+tHPJQSzYF4=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=redhat.com; spf=pass smtp.mailfrom=redhat.com; dkim=pass (1024-bit key) header.d=redhat.com header.i=@redhat.com header.b=GY+2M+Rp; arc=none smtp.client-ip=170.10.129.124
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=redhat.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=redhat.com
+Authentication-Results: smtp.subspace.kernel.org;
+	dkim=pass (1024-bit key) header.d=redhat.com header.i=@redhat.com header.b="GY+2M+Rp"
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=redhat.com;
+	s=mimecast20190719; t=1774530082;
+	h=from:from:reply-to:subject:subject:date:date:message-id:message-id:
+	 to:to:cc:cc:mime-version:mime-version:content-type:content-type:
+	 in-reply-to:in-reply-to:references:references;
+	bh=dgqnh8YCVC64TnA3VJFCquY3LHbWRG2/wHmvHeqgzDw=;
+	b=GY+2M+RptLCcfW6nYQGPNPs6J5WUa0uNqKDh+50rdiJW4HX2kw6Y6wr940JLC9bLVo/+jK
+	U6p3TjjguC1NAIzoIya+p09fEwYdjTPECe34bshRqIDb/RS+7+/IEdJ6ILuELznwpCqw1O
+	eintz1vESrTBSIx5xrRSZx6rLf3JOT4=
+Received: from mx-prod-mc-03.mail-002.prod.us-west-2.aws.redhat.com
+ (ec2-54-186-198-63.us-west-2.compute.amazonaws.com [54.186.198.63]) by
+ relay.mimecast.com with ESMTP with STARTTLS (version=TLSv1.3,
+ cipher=TLS_AES_256_GCM_SHA384) id us-mta-235-dkj09fOLMO2CHio9kGdSLw-1; Thu,
+ 26 Mar 2026 09:01:19 -0400
+X-MC-Unique: dkj09fOLMO2CHio9kGdSLw-1
+X-Mimecast-MFC-AGG-ID: dkj09fOLMO2CHio9kGdSLw_1774530071
+Received: from mx-prod-int-01.mail-002.prod.us-west-2.aws.redhat.com (mx-prod-int-01.mail-002.prod.us-west-2.aws.redhat.com [10.30.177.4])
+	(using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)
+	 key-exchange X25519 server-signature RSA-PSS (2048 bits) server-digest SHA256)
+	(No client certificate requested)
+	by mx-prod-mc-03.mail-002.prod.us-west-2.aws.redhat.com (Postfix) with ESMTPS id 5F0EF1955F18;
+	Thu, 26 Mar 2026 13:01:10 +0000 (UTC)
+Received: from blackfin.pond.sub.org (unknown [10.45.242.6])
+	by mx-prod-int-01.mail-002.prod.us-west-2.aws.redhat.com (Postfix) with ESMTPS id 627103000223;
+	Thu, 26 Mar 2026 13:01:09 +0000 (UTC)
+Received: by blackfin.pond.sub.org (Postfix, from userid 1000)
+	id 0600221E6937; Thu, 26 Mar 2026 14:01:07 +0100 (CET)
+From: Markus Armbruster <armbru@redhat.com>
+To: Alireza Sanaee <alireza.sanaee@huawei.com>
+Cc: <qemu-devel@nongnu.org>,  <anisa.su@samsung.com>,
+  <berrange@redhat.com>,  <eblake@redhat.com>,
+  <jonathan.cameron@huawei.com>,  <linux-cxl@vger.kernel.org>,
+  <linuxarm@huawei.com>,  <lizhijian@fujitsu.com>,  <mst@redhat.com>,
+  <pbonzini@redhat.com>,  <gourry@gourry.net>,  <nifan.cxl@gmail.com>,
+  <me@linux.beauty>
+Subject: Re: [PATCH 1/9] hw/mem: Add tag support to generic host memory
+ backends
+In-Reply-To: <20260326112921.000028e6.alireza.sanaee@huawei.com> (Alireza
+	Sanaee's message of "Thu, 26 Mar 2026 11:29:21 +0000")
+References: <20260325184259.366-1-alireza.sanaee@huawei.com>
+	<20260325184259.366-2-alireza.sanaee@huawei.com>
+	<87a4vuhnxy.fsf@pond.sub.org>
+	<20260326112921.000028e6.alireza.sanaee@huawei.com>
+Date: Thu, 26 Mar 2026 14:01:06 +0100
+Message-ID: <87bjgag2y5.fsf@pond.sub.org>
+User-Agent: Gnus/5.13 (Gnus v5.13)
+Precedence: bulk
+X-Mailing-List: linux-cxl@vger.kernel.org
+List-Id: <linux-cxl.vger.kernel.org>
+List-Subscribe: <mailto:linux-cxl+subscribe@vger.kernel.org>
+List-Unsubscribe: <mailto:linux-cxl+unsubscribe@vger.kernel.org>
+MIME-Version: 1.0
+X-Scanned-By: MIMEDefang 3.4.1 on 10.30.177.4
+X-Mimecast-MFC-PROC-ID: HEdkgNvOuX1cHxpYiHPfMYvl5-JMNJJM5M3AlwP7Fxo_1774530071
+X-Mimecast-Originator: redhat.com
+Content-Type: text/plain
+
+Alireza Sanaee <alireza.sanaee@huawei.com> writes:
+
+> On Thu, 26 Mar 2026 11:42:17 +0100
+> Markus Armbruster <armbru@redhat.com> wrote:
+>
+> Hi Markus,
+>
+>> Alireza Sanaee <alireza.sanaee@huawei.com> writes:
+>> 
+>> > Add a string tag property to HostMemoryBackend so that backends can be
+>> > identified by a user-assigned name at runtime. Expose the property through
+>> > QOM and add a host_memory_backend_find_by_tag() helper that walks the
+>> > object tree to locate a backend by its tag.  
+>> 
+>> Why can't you use the QOM ID?
+>> 
+>> $ qemu-system-x86_64 -S -display none -monitor stdio -object memory-backend-ram,id=fred,size=1M
+>> QEMU 10.2.90 monitor - type 'help' for more information
+>> (qemu) info qom-tree /objects/fred
+>> /fred (memory-backend-ram)
+>>   /fred[0] (memory-region)
+>> 
+>>  
+>
+> Fair question. The ID would have been a solution if it had accepted GUIDs. CXL spec 
+> requires GUIDs for extents as identification, hence new tag property.
+
+Your commit message should state that this needs to be a GUID and why.
+
+> alireza@blue-ocean:~/Downloads$ qemu-system-x86_64 -s -display none -monitor std
+> io -object memory-backend-ram,id=02bb2436-e87d-4aa1-b2be-aaffdd76bb79,size=1M
+> qemu-system-x86_64: -object memory-backend-ram,id=02bb2436-e87d-4aa1-b2be-aaffdd
+> 76bb79,size=1M: Parameter 'id' expects an identifier
+> Identifiers consist of letters, digits, '-', '.', '_', starting with a letter.
+>
+> Thanks,
+> Ali
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Received: from frasgout.his.huawei.com (frasgout.his.huawei.com [185.176.79.56])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 40651221FDE
+	for <linux-cxl@vger.kernel.org>; Thu, 26 Mar 2026 11:29:31 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=185.176.79.56
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1774524575; cv=none; b=Qsc6qug4tFbj/5dwfJBK0aDH4F362H37LRy6TYXfLBFFQ2sFHjCd8Ujl9QVNh+MUJuQq769ZxVmTeANOv0QvoWPhHvSZBJ+F+rKWnNLThJT1/ISgVrIbn9QNQv9lRqMqs2PDRsQ2XGL/OJzFw3WQ1sXxhF1s0eTxDpVFm9zA7xY=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1774524575; c=relaxed/simple;
+	bh=Juy8nmejBZ8GD0eLvamIHjd213rxLBTWDIWi+3HjmLE=;
+	h=Date:From:To:CC:Subject:Message-ID:In-Reply-To:References:
+	 MIME-Version:Content-Type; b=h9xTPn/KyY4SbYSNcswaf8buIXlHq8zp6hrmcO6HCsu9g050KTumfVdYoHRF4HuyKnPaREuSJPP+GPGax8HMgrubxctVXtsPu+K88GHXJwXPSIlGCBRnnAre58FZMslIcpu2npvRP08TxxvANyiRo24X9npKTS2oKmUGvsRoZ+U=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com; spf=pass smtp.mailfrom=huawei.com; arc=none smtp.client-ip=185.176.79.56
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=huawei.com
+Received: from mail.maildlp.com (unknown [172.18.224.83])
+	by frasgout.his.huawei.com (SkyGuard) with ESMTPS id 4fhM4F5ycJzJ46cN;
+	Thu, 26 Mar 2026 19:29:17 +0800 (CST)
+Received: from dubpeml500005.china.huawei.com (unknown [7.214.145.207])
+	by mail.maildlp.com (Postfix) with ESMTPS id E892B40569;
+	Thu, 26 Mar 2026 19:29:27 +0800 (CST)
+Received: from localhost (10.203.177.99) by dubpeml500005.china.huawei.com
+ (7.214.145.207) with Microsoft SMTP Server (version=TLS1_2,
+ cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.2.1544.11; Thu, 26 Mar
+ 2026 11:29:27 +0000
+Date: Thu, 26 Mar 2026 11:29:21 +0000
+From: Alireza Sanaee <alireza.sanaee@huawei.com>
+To: Markus Armbruster <armbru@redhat.com>
+CC: <qemu-devel@nongnu.org>, <anisa.su@samsung.com>, <berrange@redhat.com>,
+	<eblake@redhat.com>, <jonathan.cameron@huawei.com>,
+	<linux-cxl@vger.kernel.org>, <linuxarm@huawei.com>, <lizhijian@fujitsu.com>,
+	<mst@redhat.com>, <pbonzini@redhat.com>, <gourry@gourry.net>,
+	<nifan.cxl@gmail.com>, <me@linux.beauty>
+Subject: Re: [PATCH 1/9] hw/mem: Add tag support to generic host memory
+ backends
+Message-ID: <20260326112921.000028e6.alireza.sanaee@huawei.com>
+In-Reply-To: <87a4vuhnxy.fsf@pond.sub.org>
+References: <20260325184259.366-1-alireza.sanaee@huawei.com>
+	<20260325184259.366-2-alireza.sanaee@huawei.com>
+	<87a4vuhnxy.fsf@pond.sub.org>
+Organization: Huawei
+X-Mailer: Claws Mail 4.3.0 (GTK 3.24.42; x86_64-w64-mingw32)
+Precedence: bulk
+X-Mailing-List: linux-cxl@vger.kernel.org
+List-Id: <linux-cxl.vger.kernel.org>
+List-Subscribe: <mailto:linux-cxl+subscribe@vger.kernel.org>
+List-Unsubscribe: <mailto:linux-cxl+unsubscribe@vger.kernel.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="US-ASCII"
+Content-Transfer-Encoding: 7bit
+X-ClientProxiedBy: lhrpeml100010.china.huawei.com (7.191.174.197) To
+ dubpeml500005.china.huawei.com (7.214.145.207)
+
+On Thu, 26 Mar 2026 11:42:17 +0100
+Markus Armbruster <armbru@redhat.com> wrote:
+
+Hi Markus,
+
+> Alireza Sanaee <alireza.sanaee@huawei.com> writes:
+> 
+> > Add a string tag property to HostMemoryBackend so that backends can be
+> > identified by a user-assigned name at runtime. Expose the property through
+> > QOM and add a host_memory_backend_find_by_tag() helper that walks the
+> > object tree to locate a backend by its tag.  
+> 
+> Why can't you use the QOM ID?
+> 
+> $ qemu-system-x86_64 -S -display none -monitor stdio -object memory-backend-ram,id=fred,size=1M
+> QEMU 10.2.90 monitor - type 'help' for more information
+> (qemu) info qom-tree /objects/fred
+> /fred (memory-backend-ram)
+>   /fred[0] (memory-region)
+> 
+>  
+
+Fair question. The ID would have been a solution if it had accepted GUIDs. CXL spec 
+requires GUIDs for extents as identification, hence new tag property.
+
+alireza@blue-ocean:~/Downloads$ qemu-system-x86_64 -s -display none -monitor std
+io -object memory-backend-ram,id=02bb2436-e87d-4aa1-b2be-aaffdd76bb79,size=1M
+qemu-system-x86_64: -object memory-backend-ram,id=02bb2436-e87d-4aa1-b2be-aaffdd
+76bb79,size=1M: Parameter 'id' expects an identifier
+Identifiers consist of letters, digits, '-', '.', '_', starting with a letter.
+
+Thanks,
+Ali
+
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Received: from us-smtp-delivery-124.mimecast.com (us-smtp-delivery-124.mimecast.com [170.10.133.124])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id F2E0C3A7839
+	for <linux-cxl@vger.kernel.org>; Thu, 26 Mar 2026 10:42:28 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=170.10.133.124
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1774521750; cv=none; b=eJ1zMeNub6Rx64+hRVBxG50jamWuIyb3+TZAPraTCBtsStq1iyr6Q2ZRxFPrIMD8EOjCRXwahn2MegHhIlK0avkEf1kR84TbljeDhnOYR9+b14Bng08LRMItmcPBB9mA0v2vVHTQMVFR/+ycXKIr8dOMt2nAjvdoLNf2x9Ev3iI=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1774521750; c=relaxed/simple;
+	bh=998cViLeJkKEBaad+bnoC/XHmEaYJIWNV0T/i/Fp4hg=;
+	h=From:To:Cc:Subject:In-Reply-To:References:Date:Message-ID:
+	 MIME-Version:Content-Type; b=B7jLHZdeD7YYO3MnYtfQfbOYFfDR6Q1Io1QpTeDMuBVywDSxFCPJnMdZQPQeG6zXC6hlDIwNvGbfN7Hg+Tp4mGtdHynR8kR4A2Qw5PrfBkknLh/AyjifdvCZ+W4cF3In1jR++esF2uh7oC2LTpW8fzRV1sXs+Un4T6TlGwclATU=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=redhat.com; spf=pass smtp.mailfrom=redhat.com; dkim=pass (1024-bit key) header.d=redhat.com header.i=@redhat.com header.b=Tb5YYGVw; arc=none smtp.client-ip=170.10.133.124
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=redhat.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=redhat.com
+Authentication-Results: smtp.subspace.kernel.org;
+	dkim=pass (1024-bit key) header.d=redhat.com header.i=@redhat.com header.b="Tb5YYGVw"
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=redhat.com;
+	s=mimecast20190719; t=1774521747;
+	h=from:from:reply-to:subject:subject:date:date:message-id:message-id:
+	 to:to:cc:cc:mime-version:mime-version:content-type:content-type:
+	 in-reply-to:in-reply-to:references:references;
+	bh=uRiVM/hQz0BvpG69+7beiImyjSsPHNvKncV4RQM/tmk=;
+	b=Tb5YYGVwjnw7C1bAjM/3GcYIGrXD5f9l8VZWRjOY+sjNVHSrCUW9UzDUTkKeB9vei13Msn
+	ycn7xEhLPRgYjIZZYTbRJq8z/4Jhn/tHTuuTh6OImLAQ8aZ1ONjk3Bba/J/TITgDCNGAz7
+	VV67pTZcNy5E1rcw8iJOpQmukJFzBDg=
+Received: from mx-prod-mc-01.mail-002.prod.us-west-2.aws.redhat.com
+ (ec2-54-186-198-63.us-west-2.compute.amazonaws.com [54.186.198.63]) by
+ relay.mimecast.com with ESMTP with STARTTLS (version=TLSv1.3,
+ cipher=TLS_AES_256_GCM_SHA384) id us-mta-14-7NkrLcZKNYCwbta6h5sLGQ-1; Thu,
+ 26 Mar 2026 06:42:23 -0400
+X-MC-Unique: 7NkrLcZKNYCwbta6h5sLGQ-1
+X-Mimecast-MFC-AGG-ID: 7NkrLcZKNYCwbta6h5sLGQ_1774521742
+Received: from mx-prod-int-05.mail-002.prod.us-west-2.aws.redhat.com (mx-prod-int-05.mail-002.prod.us-west-2.aws.redhat.com [10.30.177.17])
+	(using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)
+	 key-exchange X25519 server-signature RSA-PSS (2048 bits) server-digest SHA256)
+	(No client certificate requested)
+	by mx-prod-mc-01.mail-002.prod.us-west-2.aws.redhat.com (Postfix) with ESMTPS id 20E5619560B1;
+	Thu, 26 Mar 2026 10:42:21 +0000 (UTC)
+Received: from blackfin.pond.sub.org (unknown [10.45.242.6])
+	by mx-prod-int-05.mail-002.prod.us-west-2.aws.redhat.com (Postfix) with ESMTPS id CB6221955D84;
+	Thu, 26 Mar 2026 10:42:19 +0000 (UTC)
+Received: by blackfin.pond.sub.org (Postfix, from userid 1000)
+	id 622E321E6937; Thu, 26 Mar 2026 11:42:17 +0100 (CET)
+From: Markus Armbruster <armbru@redhat.com>
+To: Alireza Sanaee <alireza.sanaee@huawei.com>
+Cc: <qemu-devel@nongnu.org>,  <anisa.su@samsung.com>,
+  <berrange@redhat.com>,  <eblake@redhat.com>,
+  <jonathan.cameron@huawei.com>,  <linux-cxl@vger.kernel.org>,
+  <linuxarm@huawei.com>,  <lizhijian@fujitsu.com>,  <mst@redhat.com>,
+  <pbonzini@redhat.com>,  <gourry@gourry.net>,  <nifan.cxl@gmail.com>,
+  <me@linux.beauty>
+Subject: Re: [PATCH 1/9] hw/mem: Add tag support to generic host memory
+ backends
+In-Reply-To: <20260325184259.366-2-alireza.sanaee@huawei.com> (Alireza
+	Sanaee's message of "Wed, 25 Mar 2026 18:42:49 +0000")
+References: <20260325184259.366-1-alireza.sanaee@huawei.com>
+	<20260325184259.366-2-alireza.sanaee@huawei.com>
+Date: Thu, 26 Mar 2026 11:42:17 +0100
+Message-ID: <87a4vuhnxy.fsf@pond.sub.org>
+User-Agent: Gnus/5.13 (Gnus v5.13)
+Precedence: bulk
+X-Mailing-List: linux-cxl@vger.kernel.org
+List-Id: <linux-cxl.vger.kernel.org>
+List-Subscribe: <mailto:linux-cxl+subscribe@vger.kernel.org>
+List-Unsubscribe: <mailto:linux-cxl+unsubscribe@vger.kernel.org>
+MIME-Version: 1.0
+X-Scanned-By: MIMEDefang 3.0 on 10.30.177.17
+X-Mimecast-MFC-PROC-ID: baL2JkNfG9isYiLAGWLYPNgSzmLzB64ragz_4qf5CFk_1774521742
+X-Mimecast-Originator: redhat.com
+Content-Type: text/plain
+
+Alireza Sanaee <alireza.sanaee@huawei.com> writes:
+
+> Add a string tag property to HostMemoryBackend so that backends can be
+> identified by a user-assigned name at runtime. Expose the property through
+> QOM and add a host_memory_backend_find_by_tag() helper that walks the
+> object tree to locate a backend by its tag.
+
+Why can't you use the QOM ID?
+
+$ qemu-system-x86_64 -S -display none -monitor stdio -object memory-backend-ram,id=fred,size=1M
+QEMU 10.2.90 monitor - type 'help' for more information
+(qemu) info qom-tree /objects/fred
+/fred (memory-backend-ram)
+  /fred[0] (memory-region)
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Received: from frasgout.his.huawei.com (frasgout.his.huawei.com [185.176.79.56])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 03A3D332601
+	for <linux-cxl@vger.kernel.org>; Wed, 25 Mar 2026 18:48:05 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=185.176.79.56
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1774464487; cv=none; b=qRDfPh+ZXthMfiHfCh6dJCViZDdISLpsFaQiv+ALrPf/qJBViDkwcZoBZd1Ol9ocEKfvpU+Z8AQyIw12vIqSR1DyWObWb8/NTGqEFHTGNFOBmM/UkoIPyFTi2LtgrJqzo8vf9jy1t5Ia+DxOmxm6FXE/iZ3rIyXS0ftz4HPiI/w=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1774464487; c=relaxed/simple;
+	bh=GzdNRSZXMYgyrtLfHvG383Kct0SvZ8MNKqxwGIKtuXA=;
+	h=From:To:CC:Subject:Date:Message-ID:In-Reply-To:References:
+	 MIME-Version:Content-Type; b=r50kZQSWjkH2LQr/jUOO0ls6eDQ+Ttrbq9wERH9sZlwbMC+TocavKFPwW1s20Jwy0HA9A7NWtfUDcsl+G5mTgdx5kXTbbtg9yeQLbs4dCUk5vQH7gfGnapYq+UXBjhDeojtedeRGWWbs+dZZqFsG+pHsoHhnzMGp0vwasKP0RFY=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com; spf=pass smtp.mailfrom=huawei.com; arc=none smtp.client-ip=185.176.79.56
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=huawei.com
+Received: from mail.maildlp.com (unknown [172.18.224.150])
+	by frasgout.his.huawei.com (SkyGuard) with ESMTPS id 4fgwrq2fRtzJ469d;
+	Thu, 26 Mar 2026 02:47:55 +0800 (CST)
+Received: from dubpeml500005.china.huawei.com (unknown [7.214.145.207])
+	by mail.maildlp.com (Postfix) with ESMTPS id 5254F4056B;
+	Thu, 26 Mar 2026 02:48:04 +0800 (CST)
+Received: from a2303103017.china.huawei.com (10.47.66.203) by
+ dubpeml500005.china.huawei.com (7.214.145.207) with Microsoft SMTP Server
+ (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id
+ 15.2.1544.11; Wed, 25 Mar 2026 18:48:03 +0000
+From: Alireza Sanaee <alireza.sanaee@huawei.com>
+To: <qemu-devel@nongnu.org>
+CC: <anisa.su@samsung.com>, <armbru@redhat.com>, <berrange@redhat.com>,
+	<eblake@redhat.com>, <jonathan.cameron@huawei.com>,
+	<linux-cxl@vger.kernel.org>, <linuxarm@huawei.com>, <lizhijian@fujitsu.com>,
+	<mst@redhat.com>, <pbonzini@redhat.com>, <gourry@gourry.net>,
+	<nifan.cxl@gmail.com>, <me@linux.beauty>
+Subject: [PATCH 9/9] hw/cxl: Add QMP status query for dynamic-capacity extent release
+Date: Wed, 25 Mar 2026 18:42:57 +0000
+Message-ID: <20260325184259.366-10-alireza.sanaee@huawei.com>
+X-Mailer: git-send-email 2.51.0.windows.2
+In-Reply-To: <20260325184259.366-1-alireza.sanaee@huawei.com>
+References: <20260325184259.366-1-alireza.sanaee@huawei.com>
+Precedence: bulk
+X-Mailing-List: linux-cxl@vger.kernel.org
+List-Id: <linux-cxl.vger.kernel.org>
+List-Subscribe: <mailto:linux-cxl+subscribe@vger.kernel.org>
+List-Unsubscribe: <mailto:linux-cxl+unsubscribe@vger.kernel.org>
+MIME-Version: 1.0
+Content-Transfer-Encoding: 8bit
+Content-Type: text/plain
+X-ClientProxiedBy: lhrpeml500011.china.huawei.com (7.191.174.215) To
+ dubpeml500005.china.huawei.com (7.214.145.207)
+
+Add a small status query so orchestration layers can check whether a tagged
+extent is still pending, committed, or no longer present after a release
+request.
+
+Introduce the ExtentStatus QAPI struct and the
+cxl-release-dynamic-capacity-status command.
+
+Signed-off-by: Alireza Sanaee <alireza.sanaee@huawei.com>
+---
+ hw/mem/cxl_type3.c       | 85 ++++++++++++++++++++++++++++++++++++++++
+ hw/mem/cxl_type3_stubs.c | 10 +++++
+ qapi/cxl.json            | 46 ++++++++++++++++++++++
+ 3 files changed, 141 insertions(+)
+
+diff --git a/hw/mem/cxl_type3.c b/hw/mem/cxl_type3.c
+index d5fa8a530a..8999b36e61 100644
+--- a/hw/mem/cxl_type3.c
++++ b/hw/mem/cxl_type3.c
+@@ -2635,6 +2635,91 @@ void cxl_remove_memory_alias(CXLType3Dev *dcd, struct CXLFixedWindow *fw,
+     dcd->dc.direct_mr_bitmap &= ~(1u << hdm_id);
+ }
+ 
++/*
++ * This function allows for a simple check to make sure that
++ * our extent is removed. It can be used by an orchestration layer.
++ */
++ExtentStatus *
++qmp_cxl_release_dynamic_capacity_status(const char *path,
++                                        uint16_t hid, uint8_t rid,
++                                        const char *tag,
++                                        Error **errp)
++{
++    Object *obj;
++    CXLType3Dev *dcd;
++    CXLDCExtentList *list = NULL;
++    CXLDCExtent *ent;
++    QemuUUID uuid_req;
++    ExtentStatus *res;
++
++    obj = object_resolve_path_type(path, TYPE_CXL_TYPE3, NULL);
++    if (!obj) {
++        error_setg(errp, "Unable to resolve CXL type 3 device");
++        return NULL;
++    }
++
++    dcd = CXL_TYPE3(obj);
++    if (!dcd->dc.num_regions) {
++        error_setg(errp, "No dynamic capacity support from the device");
++        return NULL;
++    }
++
++    if (rid >= dcd->dc.num_regions) {
++        error_setg(errp, "Region id is too large");
++        return NULL;
++    }
++
++    if (!tag) {
++        error_setg(errp, "Tag must be valid");
++        return NULL;
++    }
++
++    list = &dcd->dc.extents;
++    qemu_uuid_parse(tag, &uuid_req);
++    res = g_new0(ExtentStatus, 1);
++
++    /* Check committed extents */
++    QTAILQ_FOREACH(ent, list, node) {
++        QemuUUID uuid_ext;
++        g_autofree char *uuid_str = NULL;
++        memcpy(&uuid_ext.data, ent->tag, sizeof(ent->tag));
++        if (qemu_uuid_is_equal(&uuid_req, &uuid_ext)) {
++            uuid_str = qemu_uuid_unparse_strdup(&uuid_ext);
++            res->status = g_strdup("Committed");
++            res->message =
++                g_strdup_printf("Found committed extent with tag %s dpa 0x%"
++                                PRIx64 " len 0x%" PRIx64,
++                                uuid_str, ent->start_dpa, ent->len);
++            return res;
++        }
++    }
++
++    /* Check pending extents (not yet committed by kernel) */
++    {
++        CXLDCExtentGroup *group;
++        QTAILQ_FOREACH(group, &dcd->dc.extents_pending, node) {
++            QTAILQ_FOREACH(ent, &group->list, node) {
++                QemuUUID uuid_ext;
++                g_autofree char *uuid_str = NULL;
++                memcpy(&uuid_ext.data, ent->tag, sizeof(ent->tag));
++                if (qemu_uuid_is_equal(&uuid_req, &uuid_ext)) {
++                    uuid_str = qemu_uuid_unparse_strdup(&uuid_ext);
++                    res->status = g_strdup("Pending");
++                    res->message =
++                        g_strdup_printf("Found pending extent with tag %s"
++                                        " dpa 0x%" PRIx64 " len 0x%" PRIx64,
++                                        uuid_str, ent->start_dpa, ent->len);
++                    return res;
++                }
++            }
++        }
++    }
++
++    res->status = g_strdup("Released");
++    res->message = g_strdup_printf("Tag %s released or not found", tag);
++    return res;
++}
++
+ static void ct3_class_init(ObjectClass *oc, const void *data)
+ {
+     DeviceClass *dc = DEVICE_CLASS(oc);
+diff --git a/hw/mem/cxl_type3_stubs.c b/hw/mem/cxl_type3_stubs.c
+index 98292a931c..17f9414142 100644
+--- a/hw/mem/cxl_type3_stubs.c
++++ b/hw/mem/cxl_type3_stubs.c
+@@ -127,3 +127,13 @@ void qmp_cxl_release_dynamic_capacity(const char *path, uint16_t host_id,
+ {
+     error_setg(errp, "CXL Type 3 support is not compiled in");
+ }
++
++ExtentStatus *qmp_cxl_release_dynamic_capacity_status(const char *path,
++                                                      uint16_t host_id,
++                                                      uint8_t region,
++                                                      const char *tag,
++                                                      Error **errp)
++{
++    error_setg(errp, "CXL Type 3 support is not compiled in");
++    return NULL;
++}
+diff --git a/qapi/cxl.json b/qapi/cxl.json
+index 81d6198ba0..53325ba530 100644
+--- a/qapi/cxl.json
++++ b/qapi/cxl.json
+@@ -636,3 +636,49 @@
+            },
+   'features': [ 'unstable' ]
+ }
++
++##
++# @ExtentStatus:
++# This is an object that describes the status of an extent.
++#
++# @status:   String indicating the overall result, e.g. "success".
++# @message:  Human-readable description of the outcome.
++#
++# Since: 9.1
++##
++{ 'struct': 'ExtentStatus',
++      'data': { 'status': 'str', 'message': 'str' }
++}
++
++##
++# @cxl-release-dynamic-capacity-status:
++#
++# This commands checks if an extent tag has been released or not.
++#
++# @path: path to the CXL Dynamic Capacity Device in the QOM tree.
++#
++# @host-id: The "Host ID" field as defined in Compute Express Link
++#     (CXL) Specification, Revision 3.1, Table 7-71.
++#
++# @region: The "Region Number" field as defined in Compute Express
++#     Link Specification, Revision 3.1, Table 7-71.  Valid range
++#     is from 0-7.
++#
++# @tag: The "Tag" field as defined in Compute Express Link (CXL)
++#     Specification, Revision 3.1, Table 7-71.
++#
++# Features:
++#
++# @unstable: For now this command is subject to change.
++#
++# Since: 9.1
++##
++{ 'command': 'cxl-release-dynamic-capacity-status',
++  'data': { 'path': 'str',
++            'host-id': 'uint16',
++            'region': 'uint8',
++            'tag': 'str'
++          },
++  'features': [ 'unstable' ],
++  'returns': 'ExtentStatus'
++}
+-- 
+2.50.1 (Apple Git-155)
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Received: from frasgout.his.huawei.com (frasgout.his.huawei.com [185.176.79.56])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id D313313E02A
+	for <linux-cxl@vger.kernel.org>; Wed, 25 Mar 2026 18:47:33 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=185.176.79.56
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1774464455; cv=none; b=YJYk/Unu/z7tfseTyltcJA/pYqTl2FiV5RN4I+jkoln4D+dv+GA42BALjNtpTei/z50+Ef8reMmyQP3nB4ILPSs+a6VjZ4x2YkEXVVkORoBb5AbUis1xKYmYNCUTQy34OB+uaCjoje5jHBr+R0BtC73vdApWjgk1IEVCenGX0TM=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1774464455; c=relaxed/simple;
+	bh=QEQjBz7ZQIshXsAfsVROxUBglg7z3qtSZmGCamRRu04=;
+	h=From:To:CC:Subject:Date:Message-ID:In-Reply-To:References:
+	 MIME-Version:Content-Type; b=EkYEsE97BnRkZuCq4XJuls8U0cVgPiRkBoAp18Srcslo9vsCR+v+P8pvFretOw2j9mpSk84bl/PE5vMVExboLI3vBLcNf9Yec8+R/xwILRrmhSqwCaoLbxQ/F41v1Qnf2N+hBWo19SNJ5vfYNJsziuZ9oesN7rKqN7CeBT8FAyM=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com; spf=pass smtp.mailfrom=huawei.com; arc=none smtp.client-ip=185.176.79.56
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=huawei.com
+Received: from mail.maildlp.com (unknown [172.18.224.83])
+	by frasgout.his.huawei.com (SkyGuard) with ESMTPS id 4fgwrC0wMtzJ46DS;
+	Thu, 26 Mar 2026 02:47:23 +0800 (CST)
+Received: from dubpeml500005.china.huawei.com (unknown [7.214.145.207])
+	by mail.maildlp.com (Postfix) with ESMTPS id 16DA640086;
+	Thu, 26 Mar 2026 02:47:32 +0800 (CST)
+Received: from a2303103017.china.huawei.com (10.47.66.203) by
+ dubpeml500005.china.huawei.com (7.214.145.207) with Microsoft SMTP Server
+ (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id
+ 15.2.1544.11; Wed, 25 Mar 2026 18:47:30 +0000
+From: Alireza Sanaee <alireza.sanaee@huawei.com>
+To: <qemu-devel@nongnu.org>
+CC: <anisa.su@samsung.com>, <armbru@redhat.com>, <berrange@redhat.com>,
+	<eblake@redhat.com>, <jonathan.cameron@huawei.com>,
+	<linux-cxl@vger.kernel.org>, <linuxarm@huawei.com>, <lizhijian@fujitsu.com>,
+	<mst@redhat.com>, <pbonzini@redhat.com>, <gourry@gourry.net>,
+	<nifan.cxl@gmail.com>, <me@linux.beauty>
+Subject: [PATCH 8/9] hw/cxl: Add tag-based dynamic-capacity release support
+Date: Wed, 25 Mar 2026 18:42:56 +0000
+Message-ID: <20260325184259.366-9-alireza.sanaee@huawei.com>
+X-Mailer: git-send-email 2.51.0.windows.2
+In-Reply-To: <20260325184259.366-1-alireza.sanaee@huawei.com>
+References: <20260325184259.366-1-alireza.sanaee@huawei.com>
+Precedence: bulk
+X-Mailing-List: linux-cxl@vger.kernel.org
+List-Id: <linux-cxl.vger.kernel.org>
+List-Subscribe: <mailto:linux-cxl+subscribe@vger.kernel.org>
+List-Unsubscribe: <mailto:linux-cxl+unsubscribe@vger.kernel.org>
+MIME-Version: 1.0
+Content-Transfer-Encoding: 8bit
+Content-Type: text/plain
+X-ClientProxiedBy: lhrpeml500011.china.huawei.com (7.191.174.215) To
+ dubpeml500005.china.huawei.com (7.214.145.207)
+
+Add support for the tag-based dynamic-capacity release policy via the QMP
+interface. The new path scans committed extents, selects those whose stored
+tag matches the requested UUID, and emits a Release Dynamic Capacity event
+for each matching range.
+
+This is intentionally scoped to tag-driven selection. Prescriptive release
+handling and the underlying extent teardown stay in the existing paths.
+
+Signed-off-by: Alireza Sanaee <alireza.sanaee@huawei.com>
+---
+ hw/mem/cxl_type3.c | 61 ++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 61 insertions(+)
+
+diff --git a/hw/mem/cxl_type3.c b/hw/mem/cxl_type3.c
+index 6b73d58358..d5fa8a530a 100644
+--- a/hw/mem/cxl_type3.c
++++ b/hw/mem/cxl_type3.c
+@@ -2492,6 +2492,63 @@ static void qmp_cxl_process_dynamic_capacity_prescriptive(const char *path,
+     cxl_create_dc_event_records_for_extents(dcd, type, extents, num_extents);
+ }
+ 
++static void qmp_cxl_process_dynamic_capacity_tag_based(const char *path,
++        uint16_t hid, CXLDCEventType type, uint8_t rid, const char *tag,
++        CxlDynamicCapacityExtentList *records, Error **errp)
++{
++    Object *obj;
++    CXLType3Dev *dcd;
++    CXLDCExtentList *list = NULL;
++    CXLDCExtent *ent;
++    g_autofree CXLDCExtentRaw *extents = NULL;
++
++    obj = object_resolve_path_type(path, TYPE_CXL_TYPE3, NULL);
++    if (!obj) {
++        error_setg(errp, "Unable to resolve CXL type 3 device");
++        return;
++    }
++
++    dcd = CXL_TYPE3(obj);
++    if (!dcd->dc.num_regions) {
++        error_setg(errp, "No dynamic capacity support from the device");
++        return;
++    }
++
++    if (rid >= dcd->dc.num_regions) {
++        error_setg(errp, "region id is too large");
++        return;
++    }
++
++    QemuUUID uuid_req;
++    qemu_uuid_parse(tag, &uuid_req);
++
++    list = &dcd->dc.extents;
++    size_t cap = 8, n = 0;
++    extents = g_new0(CXLDCExtentRaw, cap);
++    QTAILQ_FOREACH(ent, list, node) {
++        QemuUUID uuid_ext;
++        memcpy(&uuid_ext.data, ent->tag, sizeof(ent->tag));
++        if (!qemu_uuid_is_equal(&uuid_req, &uuid_ext)) {
++            continue;
++        }
++
++        if (n == cap) {
++            cap *= 2;
++            extents = g_renew(CXLDCExtentRaw, extents, cap);
++        }
++
++        extents[n++] = (CXLDCExtentRaw){ .start_dpa = ent->start_dpa,
++                                         .len = ent->len,
++                                         .shared_seq = 0 };
++    }
++
++    if (n == 0) {
++        return;
++    }
++    extents = g_renew(CXLDCExtentRaw, extents, n);
++    cxl_create_dc_event_records_for_extents(dcd, type, extents, n);
++}
++
+ void qmp_cxl_add_dynamic_capacity(const char *path, uint16_t host_id,
+                                   CxlExtentSelectionPolicy sel_policy,
+                                   uint8_t region, const char *tag,
+@@ -2537,6 +2594,10 @@ void qmp_cxl_release_dynamic_capacity(const char *path, uint16_t host_id,
+                                                       region, tag,
+                                                       extents, errp);
+         return;
++    case CXL_EXTENT_REMOVAL_POLICY_TAG_BASED:
++        qmp_cxl_process_dynamic_capacity_tag_based(path, host_id, type, region,
++                                                   tag, extents, errp);
++        return;
+     default:
+         error_setg(errp, "Removal policy not supported");
+         return;
+-- 
+2.50.1 (Apple Git-155)
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Received: from frasgout.his.huawei.com (frasgout.his.huawei.com [185.176.79.56])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id A5C9D313E29
+	for <linux-cxl@vger.kernel.org>; Wed, 25 Mar 2026 18:47:00 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=185.176.79.56
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1774464422; cv=none; b=XvOa4fNYztcOr507i+WAQh2m/Td9v24Nqn8iQw0+b6COr9ssYYPc6uTkIGUikUz9OAdfQLQKaIYmSDGPl0OQ8mFQOqtMm+Iu3YNotcBgU6DCsFE5/B/oWXUKgDU+/SCayO1+KRbZBtyuOwkGkjnIFTx4ILRTAw82M1JY3xhCKMo=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1774464422; c=relaxed/simple;
+	bh=KR2Amgh2vKu3QZEyHXZ3+CKMQyo89iDhLbyUCPphgqw=;
+	h=From:To:CC:Subject:Date:Message-ID:In-Reply-To:References:
+	 MIME-Version:Content-Type; b=X9ylcgRGvkeGuYrH8XrwVg0278CvhDyl5iB+9CUYha4svYi8R6thfSl79vZE0xAE3DAd43dcpFgqro6Qghi0pKY5cLlmIY2eNDxtEsZ6B8AaThXtk2iHp+GTnq5qGTw+cY8JFJgzWw8NcnXzyPutuWiOAENzVK22GSBLcyy+YTc=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com; spf=pass smtp.mailfrom=huawei.com; arc=none smtp.client-ip=185.176.79.56
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=huawei.com
+Received: from mail.maildlp.com (unknown [172.18.224.107])
+	by frasgout.his.huawei.com (SkyGuard) with ESMTPS id 4fgwq31L7bzHnGdQ;
+	Thu, 26 Mar 2026 02:46:23 +0800 (CST)
+Received: from dubpeml500005.china.huawei.com (unknown [7.214.145.207])
+	by mail.maildlp.com (Postfix) with ESMTPS id F3DB240587;
+	Thu, 26 Mar 2026 02:46:58 +0800 (CST)
+Received: from a2303103017.china.huawei.com (10.47.66.203) by
+ dubpeml500005.china.huawei.com (7.214.145.207) with Microsoft SMTP Server
+ (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id
+ 15.2.1544.11; Wed, 25 Mar 2026 18:46:57 +0000
+From: Alireza Sanaee <alireza.sanaee@huawei.com>
+To: <qemu-devel@nongnu.org>
+CC: <anisa.su@samsung.com>, <armbru@redhat.com>, <berrange@redhat.com>,
+	<eblake@redhat.com>, <jonathan.cameron@huawei.com>,
+	<linux-cxl@vger.kernel.org>, <linuxarm@huawei.com>, <lizhijian@fujitsu.com>,
+	<mst@redhat.com>, <pbonzini@redhat.com>, <gourry@gourry.net>,
+	<nifan.cxl@gmail.com>, <me@linux.beauty>
+Subject: [PATCH 7/9] hw/cxl: Add release-time teardown for direct-mapped extents
+Date: Wed, 25 Mar 2026 18:42:55 +0000
+Message-ID: <20260325184259.366-8-alireza.sanaee@huawei.com>
+X-Mailer: git-send-email 2.51.0.windows.2
+In-Reply-To: <20260325184259.366-1-alireza.sanaee@huawei.com>
+References: <20260325184259.366-1-alireza.sanaee@huawei.com>
+Precedence: bulk
+X-Mailing-List: linux-cxl@vger.kernel.org
+List-Id: <linux-cxl.vger.kernel.org>
+List-Subscribe: <mailto:linux-cxl+subscribe@vger.kernel.org>
+List-Unsubscribe: <mailto:linux-cxl+unsubscribe@vger.kernel.org>
+MIME-Version: 1.0
+Content-Transfer-Encoding: 8bit
+Content-Type: text/plain
+X-ClientProxiedBy: lhrpeml500011.china.huawei.com (7.191.174.215) To
+ dubpeml500005.china.huawei.com (7.214.145.207)
+
+Consolidate teardown into the release path so all cleanup flows through a
+single place.
+
+When an extent is removed, tear down any direct alias tied to it and unmap
+a lazy-mode tagged backend before dropping the extent record. Partial
+release of backend-backed extents is rejected, since those backends are
+tracked one-per-extent and cannot be split.
+
+Signed-off-by: Alireza Sanaee <alireza.sanaee@huawei.com>
+---
+ hw/cxl/cxl-mailbox-utils.c  | 103 +++++++++++++++++++++++++++++-------
+ hw/mem/cxl_type3.c          |  37 ++++++++++++-
+ include/hw/cxl/cxl_device.h |   9 +++-
+ 3 files changed, 126 insertions(+), 23 deletions(-)
+
+diff --git a/hw/cxl/cxl-mailbox-utils.c b/hw/cxl/cxl-mailbox-utils.c
+index 4684c33ba1..9853740994 100644
+--- a/hw/cxl/cxl-mailbox-utils.c
++++ b/hw/cxl/cxl-mailbox-utils.c
+@@ -3532,7 +3532,8 @@ void cxl_insert_extent_to_extent_list(CXLDCExtentList *list,
+                                              uint8_t *tag,
+                                              uint16_t shared_seq,
+                                              int rid,
+-                                             uint64_t offset)
++                                             uint64_t offset,
++                                             int direct_window_idx)
+ {
+     CXLDCExtent *extent;
+ 
+@@ -3547,6 +3548,7 @@ void cxl_insert_extent_to_extent_list(CXLDCExtentList *list,
+     }
+     extent->shared_seq = shared_seq;
+     extent->rid = rid;
++    extent->direct_window_idx = direct_window_idx;
+ 
+     QTAILQ_INSERT_TAIL(list, extent, node);
+ }
+@@ -3571,7 +3573,8 @@ CXLDCExtentGroup *cxl_insert_extent_to_extent_group(CXLDCExtentGroup *group,
+                                                     uint8_t *tag,
+                                                     uint16_t shared_seq,
+                                                     int rid,
+-                                                    uint64_t offset)
++                                                    uint64_t offset,
++                                                    int direct_window_idx)
+ {
+     if (!group) {
+         group = g_new0(CXLDCExtentGroup, 1);
+@@ -3579,7 +3582,8 @@ CXLDCExtentGroup *cxl_insert_extent_to_extent_group(CXLDCExtentGroup *group,
+     }
+     cxl_insert_extent_to_extent_list(&group->list,
+                                      host_mem, fw, dpa, len,
+-                                     tag, shared_seq, rid, offset);
++                                     tag, shared_seq, rid, offset,
++                                     direct_window_idx);
+     return group;
+ }
+ 
+@@ -3695,6 +3699,25 @@ static bool cxl_extent_find_extent_detail(CXLDCExtentGroupList *list,
+     return false;
+ }
+ 
++static void cxl_unmap_extent_backend(CXLDCExtent *ent)
++{
++    MemoryRegion *mr;
++
++    if (!ent->hm) {
++        return;
++    }
++
++    mr = host_memory_backend_get_memory(ent->hm);
++    if (!mr) {
++        qemu_log_mask(LOG_GUEST_ERROR,
++                      "Could not get memory region from host memory backend\n");
++        return;
++    }
++
++    memory_region_set_enabled(mr, false);
++    host_memory_backend_set_mapped(ent->hm, false);
++}
++
+ static CXLRetCode cxl_dcd_add_dyn_cap_rsp_dry_run(CXLType3Dev *ct3d,
+         const CXLUpdateDCExtentListInPl *in)
+ {
+@@ -3856,11 +3879,12 @@ static CXLRetCode cmd_dcd_add_dyn_cap_rsp(const struct cxl_cmd *cmd,
+ 
+             cxl_insert_extent_to_extent_list(extent_list,
+                                              hmb_dc, fw, dpa, len,
+-                                             tag, 0, rid, offset);
++                                             tag, 0, rid, offset, mr_idx);
+         } else {
+             cxl_insert_extent_to_extent_list(extent_list,
+                                              NULL, NULL, dpa, len,
+-                                             NULL, 0, -1, (uint64_t)-1);
++                                             NULL, 0, -1,
++                                             (uint64_t)-1, -1);
+         }
+         ct3d->dc.total_extent_count += 1;
+         ct3d->dc.nr_extents_accepted += 1;
+@@ -3892,7 +3916,8 @@ static uint32_t copy_extent_list(CXLDCExtentList *dst,
+                                          ent->hm, ent->fw,
+                                          ent->start_dpa, ent->len,
+                                          ent->tag, ent->shared_seq,
+-                                         ent->rid, ent->offset);
++                                         ent->rid, ent->offset,
++                                         ent->direct_window_idx);
+         cnt++;
+     }
+     return cnt;
+@@ -3900,6 +3925,7 @@ static uint32_t copy_extent_list(CXLDCExtentList *dst,
+ 
+ static CXLRetCode cxl_dc_extent_release_dry_run(CXLType3Dev *ct3d,
+         const CXLUpdateDCExtentListInPl *in, CXLDCExtentList *updated_list,
++        CXLDCExtentList *updated_removed_list,
+         uint32_t *updated_list_size)
+ {
+     CXLDCExtent *ent, *ent_next;
+@@ -3909,6 +3935,9 @@ static CXLRetCode cxl_dc_extent_release_dry_run(CXLType3Dev *ct3d,
+     CXLRetCode ret = CXL_MBOX_SUCCESS;
+ 
+     QTAILQ_INIT(updated_list);
++    if (updated_removed_list) {
++        QTAILQ_INIT(updated_removed_list);
++    }
+     copy_extent_list(updated_list, &ct3d->dc.extents);
+ 
+     for (i = 0; i < in->num_entries_updated; i++) {
+@@ -3942,25 +3971,44 @@ static CXLRetCode cxl_dc_extent_release_dry_run(CXLType3Dev *ct3d,
+                     }
+                     len_done = ent_len - len1 - len2;
+ 
++                    /*
++                     * Tagged backends are mapped one-backend-per-extent.
++                     * Partial release would leave a backend-backed extent
++                     * behind without a clean backend lifecycle.
++                     */
++                    if (ent->hm && (len1 || len2)) {
++                        ret = CXL_MBOX_INVALID_INPUT;
++                        goto free_and_exit;
++                    }
++
++                    /* Cannot split extents with direct window mapping */
++                    if (ent->direct_window_idx >= 0 && (len1 || len2)) {
++                        ret = CXL_MBOX_INVALID_INPUT;
++                        goto free_and_exit;
++                    }
++
++                    if (updated_removed_list) {
++                        cxl_insert_extent_to_extent_list(
++                            updated_removed_list, ent->hm, ent->fw,
++                            ent->start_dpa, ent->len, ent->tag, ent->shared_seq,
++                            ent->rid, ent->offset, ent->direct_window_idx);
++                    }
++
+                     cxl_remove_extent_from_extent_list(updated_list, ent);
+                     cnt_delta--;
+ 
+                     if (len1) {
+-                        cxl_insert_extent_to_extent_list(updated_list,
+-                                                         NULL, NULL,
+-                                                         ent_start_dpa, len1,
+-                                                         ent->tag, 0,
+-                                                         ent->rid,
+-                                                         ent->offset);
++                        cxl_insert_extent_to_extent_list(
++                            updated_list, NULL, NULL,
++                            ent_start_dpa, len1, ent->tag, 0,
++                            ent->rid, ent->offset, ent->direct_window_idx);
+                         cnt_delta++;
+                     }
+                     if (len2) {
+-                        cxl_insert_extent_to_extent_list(updated_list,
+-                                                         NULL, NULL,
+-                                                         dpa + len, len2,
+-                                                         ent->tag, 0,
+-                                                         ent->rid,
+-                                                         ent->offset);
++                        cxl_insert_extent_to_extent_list(
++                            updated_list, NULL, NULL,
++                            dpa + len, len2, ent->tag, 0,
++                            ent->rid, ent->offset, ent->direct_window_idx);
+                         cnt_delta++;
+                     }
+ 
+@@ -4002,6 +4050,7 @@ static CXLRetCode cmd_dcd_release_dyn_cap(const struct cxl_cmd *cmd,
+     CXLUpdateDCExtentListInPl *in = (void *)payload_in;
+     CXLType3Dev *ct3d = CXL_TYPE3(cci->d);
+     CXLDCExtentList updated_list;
++    CXLDCExtentList updated_removed_list;
+     CXLDCExtent *ent, *ent_next;
+     uint32_t updated_list_size;
+     CXLRetCode ret;
+@@ -4025,11 +4074,26 @@ static CXLRetCode cmd_dcd_release_dyn_cap(const struct cxl_cmd *cmd,
+     }
+ 
+     ret = cxl_dc_extent_release_dry_run(ct3d, in, &updated_list,
++                                        &updated_removed_list,
+                                         &updated_list_size);
+     if (ret != CXL_MBOX_SUCCESS) {
+         return ret;
+     }
+ 
++    if (ct3d->direct_mr_enabled) {
++        /* Remove memory alias for the removed extents */
++        QTAILQ_FOREACH_SAFE(ent, &updated_removed_list, node, ent_next) {
++            cxl_remove_memory_alias(ct3d, ent->fw, ent->direct_window_idx);
++            cxl_unmap_extent_backend(ent);
++            cxl_remove_extent_from_extent_list(&updated_removed_list, ent);
++        }
++    } else {
++        QTAILQ_FOREACH_SAFE(ent, &updated_removed_list, node, ent_next) {
++            cxl_unmap_extent_backend(ent);
++            cxl_remove_extent_from_extent_list(&updated_removed_list, ent);
++        }
++    }
++
+     /*
+      * If the dry run release passes, the returned updated_list will
+      * be the updated extent list and we just need to clear the extents
+@@ -4438,7 +4502,7 @@ static CXLRetCode cmd_fm_initiate_dc_add(const struct cxl_cmd *cmd,
+                                                           ext->start_dpa,
+                                                           ext->len, ext->tag,
+                                                           ext->shared_seq, 0,
+-                                                          (uint64_t)-1);
++                                                          (uint64_t)-1, -1);
+             }
+ 
+             cxl_extent_group_list_insert_tail(&ct3d->dc.extents_pending, group);
+@@ -4520,6 +4584,7 @@ static CXLRetCode cmd_fm_initiate_dc_release(const struct cxl_cmd *cmd,
+             rc = cxl_dc_extent_release_dry_run(ct3d,
+                                                list,
+                                                &updated_list,
++                                               NULL,
+                                                &updated_list_size);
+             if (rc) {
+                 return rc;
+diff --git a/hw/mem/cxl_type3.c b/hw/mem/cxl_type3.c
+index e13826eb0b..6b73d58358 100644
+--- a/hw/mem/cxl_type3.c
++++ b/hw/mem/cxl_type3.c
+@@ -2465,7 +2465,8 @@ static void qmp_cxl_process_dynamic_capacity_prescriptive(const char *path,
+                                                           extents[i].tag,
+                                                           extents[i].shared_seq,
+                                                           rid,
+-                                                          offset);
++                                                          offset,
++                                                          0);
+             } else {
+                 group = cxl_insert_extent_to_extent_group(group,
+                                                           dcd->dc.host_dc,
+@@ -2475,7 +2476,8 @@ static void qmp_cxl_process_dynamic_capacity_prescriptive(const char *path,
+                                                           extents[i].tag,
+                                                           extents[i].shared_seq,
+                                                           rid,
+-                                                          offset);
++                                                          offset,
++                                                          0);
+             }
+         }
+ 
+@@ -2541,6 +2543,37 @@ void qmp_cxl_release_dynamic_capacity(const char *path, uint16_t host_id,
+     }
+ }
+ 
++void cxl_remove_memory_alias(CXLType3Dev *dcd, struct CXLFixedWindow *fw,
++                             int hdm_id)
++{
++    MemoryRegion *mr;
++
++    if (hdm_id < 0 || hdm_id >= CXL_DC_MAX_DIRECT_MR) {
++        qemu_log_mask(LOG_GUEST_ERROR,
++                      "Invalid direct window index %d\n", hdm_id);
++        return;
++    }
++
++    if (dcd->dc.total_capacity_cmd > 0) {
++        mr = &dcd->dc.dc_direct_mr[hdm_id];
++    } else {
++        qemu_log_mask(LOG_GUEST_ERROR,
++                      "No dynamic capacity command support, "
++                      "cannot remove memory region alias\n");
++        return;
++    }
++
++    if (!fw) {
++        qemu_log_mask(LOG_GUEST_ERROR,
++                      "Cannot remove memory region alias "
++                      "without a valid fixed window\n");
++        return;
++    }
++
++    memory_region_del_subregion(&fw->mr, mr);
++    dcd->dc.direct_mr_bitmap &= ~(1u << hdm_id);
++}
++
+ static void ct3_class_init(ObjectClass *oc, const void *data)
+ {
+     DeviceClass *dc = DEVICE_CLASS(oc);
+diff --git a/include/hw/cxl/cxl_device.h b/include/hw/cxl/cxl_device.h
+index 1e904d7b48..42db9c7ce4 100644
+--- a/include/hw/cxl/cxl_device.h
++++ b/include/hw/cxl/cxl_device.h
+@@ -654,6 +654,7 @@ typedef struct CXLDCExtent {
+     uint8_t rsvd[0x6];
+     int rid;
+     uint64_t offset;
++    int direct_window_idx;
+ 
+     QTAILQ_ENTRY(CXLDCExtent) node;
+ } CXLDCExtent;
+@@ -879,7 +880,8 @@ void cxl_insert_extent_to_extent_list(CXLDCExtentList *list,
+                                       uint8_t *tag,
+                                       uint16_t shared_seq,
+                                       int rid,
+-                                      uint64_t offset);
++                                      uint64_t offset,
++                                      int direct_window_idx);
+ bool test_any_bits_set(const unsigned long *addr, unsigned long nr,
+                        unsigned long size);
+ bool cxl_extents_contains_dpa_range(CXLDCExtentList *list,
+@@ -892,7 +894,8 @@ CXLDCExtentGroup *cxl_insert_extent_to_extent_group(CXLDCExtentGroup *group,
+                                                     uint8_t *tag,
+                                                     uint16_t shared_seq,
+                                                     int rid,
+-                                                    uint64_t offset);
++                                                    uint64_t offset,
++                                                    int direct_window_idx);
+ void cxl_extent_group_list_insert_tail(CXLDCExtentGroupList *list,
+                                        CXLDCExtentGroup *group);
+ uint32_t cxl_extent_group_list_delete_front(CXLDCExtentGroupList *list);
+@@ -900,6 +903,8 @@ void ct3_set_region_block_backed(CXLType3Dev *ct3d, uint64_t dpa,
+                                  uint64_t len);
+ void ct3_clear_region_block_backed(CXLType3Dev *ct3d, uint64_t dpa,
+                                    uint64_t len);
++void cxl_remove_memory_alias(CXLType3Dev *dcd, struct CXLFixedWindow *fw,
++                             int hdm_id);
+ bool ct3_test_region_block_backed(CXLType3Dev *ct3d, uint64_t dpa,
+                                   uint64_t len);
+ void cxl_assign_event_header(CXLEventRecordHdr *hdr,
+-- 
+2.50.1 (Apple Git-155)
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Received: from frasgout.his.huawei.com (frasgout.his.huawei.com [185.176.79.56])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 0993E318BA6
+	for <linux-cxl@vger.kernel.org>; Wed, 25 Mar 2026 18:46:27 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=185.176.79.56
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1774464389; cv=none; b=Icc1VhdwrwoegkZrF4tmCfHl7DAa/6VRUyw0CV8M3sUKMY6kT4NAQ+Cvdk86DV11JHk5V4p53mY9BwdF3B1T/1yXLjVHtBstd+gLu1wiSnoOW1PET0MG1lb7/mgJl9v1ovxaYAuHafKpviS1erxrInW1Hxc0TMx42L7exzM4u2o=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1774464389; c=relaxed/simple;
+	bh=wmqKWX/7BXMob1Rh1XRHClz15HTruf+fG4jwwfgpfmk=;
+	h=From:To:CC:Subject:Date:Message-ID:In-Reply-To:References:
+	 MIME-Version:Content-Type; b=CDQ0xdsKQTJRfLA73nP8C4ZfaXZr+6e5OrF/frCUzKIEyQfZDoehibCkq8tTQgQbm6Os67CD6wR2t4cDY2W2ODG0rJHv9mKkaFC4sy9LNgsNML9+nCgDq3iGy5iGKDqQPEtCUP8jAtqsamcfeKcOdtTJVulVZgKvtI4tjYwWT/c=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com; spf=pass smtp.mailfrom=huawei.com; arc=none smtp.client-ip=185.176.79.56
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=huawei.com
+Received: from mail.maildlp.com (unknown [172.18.224.107])
+	by frasgout.his.huawei.com (SkyGuard) with ESMTPS id 4fgwpQ3lhYzHnGdQ;
+	Thu, 26 Mar 2026 02:45:50 +0800 (CST)
+Received: from dubpeml500005.china.huawei.com (unknown [7.214.145.207])
+	by mail.maildlp.com (Postfix) with ESMTPS id 5A88740584;
+	Thu, 26 Mar 2026 02:46:26 +0800 (CST)
+Received: from a2303103017.china.huawei.com (10.47.66.203) by
+ dubpeml500005.china.huawei.com (7.214.145.207) with Microsoft SMTP Server
+ (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id
+ 15.2.1544.11; Wed, 25 Mar 2026 18:46:25 +0000
+From: Alireza Sanaee <alireza.sanaee@huawei.com>
+To: <qemu-devel@nongnu.org>
+CC: <anisa.su@samsung.com>, <armbru@redhat.com>, <berrange@redhat.com>,
+	<eblake@redhat.com>, <jonathan.cameron@huawei.com>,
+	<linux-cxl@vger.kernel.org>, <linuxarm@huawei.com>, <lizhijian@fujitsu.com>,
+	<mst@redhat.com>, <pbonzini@redhat.com>, <gourry@gourry.net>,
+	<nifan.cxl@gmail.com>, <me@linux.beauty>
+Subject: [PATCH 6/9] hw/cxl: Create direct fixed-window aliases for accepted extents
+Date: Wed, 25 Mar 2026 18:42:54 +0000
+Message-ID: <20260325184259.366-7-alireza.sanaee@huawei.com>
+X-Mailer: git-send-email 2.51.0.windows.2
+In-Reply-To: <20260325184259.366-1-alireza.sanaee@huawei.com>
+References: <20260325184259.366-1-alireza.sanaee@huawei.com>
+Precedence: bulk
+X-Mailing-List: linux-cxl@vger.kernel.org
+List-Id: <linux-cxl.vger.kernel.org>
+List-Subscribe: <mailto:linux-cxl+subscribe@vger.kernel.org>
+List-Unsubscribe: <mailto:linux-cxl+unsubscribe@vger.kernel.org>
+MIME-Version: 1.0
+Content-Transfer-Encoding: 8bit
+Content-Type: text/plain
+X-ClientProxiedBy: lhrpeml500011.china.huawei.com (7.191.174.215) To
+ dubpeml500005.china.huawei.com (7.214.145.207)
+
+For devices using dc-regions-total-size, the fallback read/write path still
+routes through host_dc_as, but accepted extents are backed by individual
+host memory backends rather than a single preconfigured address space.
+Install aliases into the owning fixed window so accepted dynamic-capacity
+memory is reachable through the normal CXL decoder path.
+
+Record the non-interleaved decoder window discovered during HDM setup,
+reserve per-device alias slots for lazy DC extents, and create an alias
+from the accepted backend into that window when Add Dynamic Capacity
+Response commits the extent.
+
+This is scoped to the current non-interleaved direct-mapping model and uses
+a small fixed pool of alias slots for now.
+
+Signed-off-by: Alireza Sanaee <alireza.sanaee@huawei.com>
+---
+ hw/cxl/cxl-host.c           |  6 ++++
+ hw/cxl/cxl-mailbox-utils.c  | 61 +++++++++++++++++++++++++++++--------
+ hw/mem/cxl_type3.c          |  6 ++--
+ include/hw/cxl/cxl_device.h | 18 +++++++++--
+ 4 files changed, 75 insertions(+), 16 deletions(-)
+
+diff --git a/hw/cxl/cxl-host.c b/hw/cxl/cxl-host.c
+index 079b27133b..4647754cc9 100644
+--- a/hw/cxl/cxl-host.c
++++ b/hw/cxl/cxl-host.c
+@@ -300,6 +300,7 @@ static void cxl_fmws_direct_passthrough_setup(CXLDirectPTState *state,
+             offset = state->dpa_base - vmr_size;
+         }
+     }
++
+     if (!mr) {
+         return;
+     }
+@@ -358,10 +359,15 @@ static int cxl_fmws_direct_passthrough(Object *obj, void *opaque)
+ 
+     /* Verify not interleaved */
+     if (!cxl_cfmws_find_device(fw, state->decoder_base, false)) {
++        state->ct3d->direct_mr_enabled = false;
+         return 0;
+     }
++    state->ct3d->direct_mr_enabled = true;
+ 
+     cxl_fmws_direct_passthrough_setup(state, fw);
++    state->ct3d->dc.fw = fw;
++    state->ct3d->dc.dc_decoder_window.base = state->decoder_base;
++    state->ct3d->dc.dc_decoder_window.size = state->decoder_size;
+ 
+     return 0;
+ }
+diff --git a/hw/cxl/cxl-mailbox-utils.c b/hw/cxl/cxl-mailbox-utils.c
+index cc7be6e68c..4684c33ba1 100644
+--- a/hw/cxl/cxl-mailbox-utils.c
++++ b/hw/cxl/cxl-mailbox-utils.c
+@@ -3531,7 +3531,8 @@ void cxl_insert_extent_to_extent_list(CXLDCExtentList *list,
+                                              uint64_t len,
+                                              uint8_t *tag,
+                                              uint16_t shared_seq,
+-                                             int rid)
++                                             int rid,
++                                             uint64_t offset)
+ {
+     CXLDCExtent *extent;
+ 
+@@ -3540,6 +3541,7 @@ void cxl_insert_extent_to_extent_list(CXLDCExtentList *list,
+     extent->fw = fw;
+     extent->start_dpa = dpa;
+     extent->len = len;
++    extent->offset = offset;
+     if (tag) {
+         memcpy(extent->tag, tag, 0x10);
+     }
+@@ -3568,7 +3570,8 @@ CXLDCExtentGroup *cxl_insert_extent_to_extent_group(CXLDCExtentGroup *group,
+                                                     uint64_t len,
+                                                     uint8_t *tag,
+                                                     uint16_t shared_seq,
+-                                                    int rid)
++                                                    int rid,
++                                                    uint64_t offset)
+ {
+     if (!group) {
+         group = g_new0(CXLDCExtentGroup, 1);
+@@ -3576,7 +3579,7 @@ CXLDCExtentGroup *cxl_insert_extent_to_extent_group(CXLDCExtentGroup *group,
+     }
+     cxl_insert_extent_to_extent_list(&group->list,
+                                      host_mem, fw, dpa, len,
+-                                     tag, shared_seq, rid);
++                                     tag, shared_seq, rid, offset);
+     return group;
+ }
+ 
+@@ -3672,7 +3675,8 @@ static CXLRetCode cxl_detect_malformed_extent_list(CXLType3Dev *ct3d,
+ static bool cxl_extent_find_extent_detail(CXLDCExtentGroupList *list,
+                                           uint64_t start_dpa, uint64_t len,
+                                           uint8_t *tag, HostMemoryBackend **hmb,
+-                                          struct CXLFixedWindow **fw, int *rid)
++                                          struct CXLFixedWindow **fw, int *rid,
++                                          uint64_t *offset)
+ {
+     CXLDCExtent *ent;
+     CXLDCExtentGroup *group = QTAILQ_FIRST(list);
+@@ -3683,6 +3687,7 @@ static bool cxl_extent_find_extent_detail(CXLDCExtentGroupList *list,
+             *hmb = ent->hm;
+             memcpy(tag, ent->tag, 0x10);
+             *rid = ent->rid;
++            *offset = ent->offset;
+             return true;
+         }
+     }
+@@ -3744,7 +3749,7 @@ static CXLRetCode cmd_dcd_add_dyn_cap_rsp(const struct cxl_cmd *cmd,
+     HostMemoryBackend *hmb_dc;
+     uint8_t tag[0x10];
+     uint32_t i, num;
+-    uint64_t dpa, len;
++    uint64_t dpa, len, offset;
+     int rid;
+     CXLRetCode ret;
+ 
+@@ -3783,12 +3788,14 @@ static CXLRetCode cmd_dcd_add_dyn_cap_rsp(const struct cxl_cmd *cmd,
+         dpa = in->updated_entries[i].start_dpa;
+         len = in->updated_entries[i].len;
+         if (ct3d->dc.total_capacity_cmd) {
++            int mr_idx = -1;
+             bool found;
+             MemoryRegion *mr;
+ 
+             found = cxl_extent_find_extent_detail(&ct3d->dc.extents_pending,
+                                                   dpa, len, tag,
+-                                                  &hmb_dc, &fw, &rid);
++                                                  &hmb_dc, &fw, &rid,
++                                                  &offset);
+ 
+             /*
+              * Host accepted an extent where device lacks details including
+@@ -3822,13 +3829,38 @@ static CXLRetCode cmd_dcd_add_dyn_cap_rsp(const struct cxl_cmd *cmd,
+             memory_region_set_enabled(mr, true);
+             host_memory_backend_set_mapped(hmb_dc, true);
+ 
++            /* Optional direct alias mapping into fixed memory window */
++            if (ct3d->direct_mr_enabled) {
++                uint32_t full_mask = (1u << CXL_DC_MAX_DIRECT_MR) - 1;
++                if ((ct3d->dc.direct_mr_bitmap & full_mask) == full_mask) {
++                    qemu_log_mask(LOG_GUEST_ERROR,
++                                  "Out of direct mapping slots\n");
++                    return CXL_MBOX_RESOURCES_EXHAUSTED;
++                }
++                mr_idx = ctz32(~ct3d->dc.direct_mr_bitmap);
++                g_autofree char *direct_mapping_name =
++                    g_strdup_printf("cxl-direct-mapping-%d", mr_idx);
++                hwaddr region_offset = dpa - ct3d->dc.regions[rid].base;
++                MemoryRegion *dr_dc_mr = &ct3d->dc.dc_direct_mr[mr_idx];
++
++                memory_region_init_alias(dr_dc_mr, OBJECT(ct3d),
++                                         direct_mapping_name, mr,
++                                         region_offset,
++                                         ct3d->dc.dc_decoder_window.size);
++                memory_region_add_subregion(&fw->mr,
++                    ct3d->dc.dc_decoder_window.base - fw->base + offset,
++                    dr_dc_mr);
++
++                ct3d->dc.direct_mr_bitmap |= (1u << mr_idx);
++            }
++
+             cxl_insert_extent_to_extent_list(extent_list,
+                                              hmb_dc, fw, dpa, len,
+-                                             NULL, 0, rid);
++                                             tag, 0, rid, offset);
+         } else {
+             cxl_insert_extent_to_extent_list(extent_list,
+                                              NULL, NULL, dpa, len,
+-                                             NULL, 0, -1);
++                                             NULL, 0, -1, (uint64_t)-1);
+         }
+         ct3d->dc.total_extent_count += 1;
+         ct3d->dc.nr_extents_accepted += 1;
+@@ -3860,7 +3892,7 @@ static uint32_t copy_extent_list(CXLDCExtentList *dst,
+                                          ent->hm, ent->fw,
+                                          ent->start_dpa, ent->len,
+                                          ent->tag, ent->shared_seq,
+-                                         ent->rid);
++                                         ent->rid, ent->offset);
+         cnt++;
+     }
+     return cnt;
+@@ -3917,14 +3949,18 @@ static CXLRetCode cxl_dc_extent_release_dry_run(CXLType3Dev *ct3d,
+                         cxl_insert_extent_to_extent_list(updated_list,
+                                                          NULL, NULL,
+                                                          ent_start_dpa, len1,
+-                                                         NULL, 0, ent->rid);
++                                                         ent->tag, 0,
++                                                         ent->rid,
++                                                         ent->offset);
+                         cnt_delta++;
+                     }
+                     if (len2) {
+                         cxl_insert_extent_to_extent_list(updated_list,
+                                                          NULL, NULL,
+                                                          dpa + len, len2,
+-                                                         NULL, 0, ent->rid);
++                                                         ent->tag, 0,
++                                                         ent->rid,
++                                                         ent->offset);
+                         cnt_delta++;
+                     }
+ 
+@@ -4401,7 +4437,8 @@ static CXLRetCode cmd_fm_initiate_dc_add(const struct cxl_cmd *cmd,
+                                                           NULL, NULL,
+                                                           ext->start_dpa,
+                                                           ext->len, ext->tag,
+-                                                          ext->shared_seq, 0);
++                                                          ext->shared_seq, 0,
++                                                          (uint64_t)-1);
+             }
+ 
+             cxl_extent_group_list_insert_tail(&ct3d->dc.extents_pending, group);
+diff --git a/hw/mem/cxl_type3.c b/hw/mem/cxl_type3.c
+index bd32532c7a..e13826eb0b 100644
+--- a/hw/mem/cxl_type3.c
++++ b/hw/mem/cxl_type3.c
+@@ -2464,7 +2464,8 @@ static void qmp_cxl_process_dynamic_capacity_prescriptive(const char *path,
+                                                           extents[i].len,
+                                                           extents[i].tag,
+                                                           extents[i].shared_seq,
+-                                                          rid);
++                                                          rid,
++                                                          offset);
+             } else {
+                 group = cxl_insert_extent_to_extent_group(group,
+                                                           dcd->dc.host_dc,
+@@ -2473,7 +2474,8 @@ static void qmp_cxl_process_dynamic_capacity_prescriptive(const char *path,
+                                                           extents[i].len,
+                                                           extents[i].tag,
+                                                           extents[i].shared_seq,
+-                                                          rid);
++                                                          rid,
++                                                          offset);
+             }
+         }
+ 
+diff --git a/include/hw/cxl/cxl_device.h b/include/hw/cxl/cxl_device.h
+index a84b8ab358..1e904d7b48 100644
+--- a/include/hw/cxl/cxl_device.h
++++ b/include/hw/cxl/cxl_device.h
+@@ -634,6 +634,7 @@ typedef struct CXLMemSparingWriteAttrs {
+ #define CXL_MEMDEV_SOFT_SPARING_SUPPORT_FLAG    BIT(2)
+ 
+ #define DCD_MAX_NUM_REGION 8
++#define CXL_DC_MAX_DIRECT_MR 4
+ 
+ typedef struct CXLDCExtentRaw {
+     uint64_t start_dpa;
+@@ -652,6 +653,7 @@ typedef struct CXLDCExtent {
+     uint16_t shared_seq;
+     uint8_t rsvd[0x6];
+     int rid;
++    uint64_t offset;
+ 
+     QTAILQ_ENTRY(CXLDCExtent) node;
+ } CXLDCExtent;
+@@ -720,6 +722,7 @@ struct CXLType3Dev {
+     /* State */
+     MemoryRegion direct_mr[CXL_HDM_DECODER_COUNT];
+     CXLFixedWindow *direct_mr_fw[CXL_HDM_DECODER_COUNT];
++    bool direct_mr_enabled;
+     AddressSpace hostvmem_as;
+     AddressSpace hostpmem_as;
+     CXLComponentState cxl_cstate;
+@@ -785,6 +788,14 @@ struct CXLType3Dev {
+         HostMemoryBackend *host_dc;
+         AddressSpace host_dc_as;
+         struct CXLFixedWindow *fw;
++        uint32_t direct_mr_bitmap;
++        /*
++         * dc_decoder_window represents the CXL Decoder Window
++         */
++        struct decoder_window {
++            hwaddr base;
++            hwaddr size;
++        } dc_decoder_window;
+         /*
+          * total_capacity is equivalent to the dynamic capability
+          * memory region size.
+@@ -799,6 +810,7 @@ struct CXLType3Dev {
+ 
+         uint8_t num_regions; /* 0-8 regions */
+         CXLDCRegion regions[DCD_MAX_NUM_REGION];
++        MemoryRegion dc_direct_mr[CXL_DC_MAX_DIRECT_MR];
+     } dc;
+ 
+     struct CXLSanitizeInfo *media_op_sanitize;
+@@ -866,7 +878,8 @@ void cxl_insert_extent_to_extent_list(CXLDCExtentList *list,
+                                       uint64_t len,
+                                       uint8_t *tag,
+                                       uint16_t shared_seq,
+-                                      int rid);
++                                      int rid,
++                                      uint64_t offset);
+ bool test_any_bits_set(const unsigned long *addr, unsigned long nr,
+                        unsigned long size);
+ bool cxl_extents_contains_dpa_range(CXLDCExtentList *list,
+@@ -878,7 +891,8 @@ CXLDCExtentGroup *cxl_insert_extent_to_extent_group(CXLDCExtentGroup *group,
+                                                     uint64_t len,
+                                                     uint8_t *tag,
+                                                     uint16_t shared_seq,
+-                                                    int rid);
++                                                    int rid,
++                                                    uint64_t offset);
+ void cxl_extent_group_list_insert_tail(CXLDCExtentGroupList *list,
+                                        CXLDCExtentGroup *group);
+ uint32_t cxl_extent_group_list_delete_front(CXLDCExtentGroupList *list);
+-- 
+2.50.1 (Apple Git-155)
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Received: from frasgout.his.huawei.com (frasgout.his.huawei.com [185.176.79.56])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 8A90E2EB859
+	for <linux-cxl@vger.kernel.org>; Wed, 25 Mar 2026 18:45:55 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=185.176.79.56
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1774464357; cv=none; b=iclPkRSKYHV+9g75naGZr05zM1A9bm2MhxeApfBVK7f1W4wXLcF/nvU4rfVadvYgNxkPB+8m8DpgYF7X8CKiP+YJT5hLdoTvmObkMBlEpL5MMTXei0s690Bt0y7Kwd31f6OHodzEE/9NIp3vh3utPtlqZKyaFVtxL3Fuf9LFKEY=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1774464357; c=relaxed/simple;
+	bh=v271Hn3Lnrj5e0Pesa891R0dbaBNcgdZoJG9sB0w0UE=;
+	h=From:To:CC:Subject:Date:Message-ID:In-Reply-To:References:
+	 MIME-Version:Content-Type; b=XiJbXYN2CskzKyXLL7unO7q8hbE3fsJ5vHBhwtdNPMl8zP6J4QbuSXUWM5+tVknmJMEbYmU/J8L+S2dr7av8qXpl0WVmJKvKmwi3uoHjb4dz8v0TQ0+Os0ikrPfOjRKahSoHeBJaJguC3xdYqj2qJEB2y3EB5Or9Hj1U1/RIQpQ=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com; spf=pass smtp.mailfrom=huawei.com; arc=none smtp.client-ip=185.176.79.56
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=huawei.com
+Received: from mail.maildlp.com (unknown [172.18.224.107])
+	by frasgout.his.huawei.com (SkyGuard) with ESMTPS id 4fgwnn6sp4zHnGjr;
+	Thu, 26 Mar 2026 02:45:17 +0800 (CST)
+Received: from dubpeml500005.china.huawei.com (unknown [7.214.145.207])
+	by mail.maildlp.com (Postfix) with ESMTPS id C5BF540584;
+	Thu, 26 Mar 2026 02:45:53 +0800 (CST)
+Received: from a2303103017.china.huawei.com (10.47.66.203) by
+ dubpeml500005.china.huawei.com (7.214.145.207) with Microsoft SMTP Server
+ (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id
+ 15.2.1544.11; Wed, 25 Mar 2026 18:45:52 +0000
+From: Alireza Sanaee <alireza.sanaee@huawei.com>
+To: <qemu-devel@nongnu.org>
+CC: <anisa.su@samsung.com>, <armbru@redhat.com>, <berrange@redhat.com>,
+	<eblake@redhat.com>, <jonathan.cameron@huawei.com>,
+	<linux-cxl@vger.kernel.org>, <linuxarm@huawei.com>, <lizhijian@fujitsu.com>,
+	<mst@redhat.com>, <pbonzini@redhat.com>, <gourry@gourry.net>,
+	<nifan.cxl@gmail.com>, <me@linux.beauty>
+Subject: [PATCH 5/9] hw/cxl: Map lazy memory backend after host acceptance
+Date: Wed, 25 Mar 2026 18:42:53 +0000
+Message-ID: <20260325184259.366-6-alireza.sanaee@huawei.com>
+X-Mailer: git-send-email 2.51.0.windows.2
+In-Reply-To: <20260325184259.366-1-alireza.sanaee@huawei.com>
+References: <20260325184259.366-1-alireza.sanaee@huawei.com>
+Precedence: bulk
+X-Mailing-List: linux-cxl@vger.kernel.org
+List-Id: <linux-cxl.vger.kernel.org>
+List-Subscribe: <mailto:linux-cxl+subscribe@vger.kernel.org>
+List-Unsubscribe: <mailto:linux-cxl+unsubscribe@vger.kernel.org>
+MIME-Version: 1.0
+Content-Transfer-Encoding: 8bit
+Content-Type: text/plain
+X-ClientProxiedBy: lhrpeml500011.china.huawei.com (7.191.174.215) To
+ dubpeml500005.china.huawei.com (7.214.145.207)
+
+In the dc-regions-total-size flow, a requested extent is not backed when it
+is queued. It becomes usable only after the host accepts it with Add
+Dynamic Capacity Response.
+
+Use that response path to look up the first pending group's metadata for
+each accepted extent, enable the selected host backend, and move the
+backend and fixed-window references onto the committed extent list. The
+accepted range is then marked backed just like the non-lazy path.
+
+This wires host acceptance to the lazy backend lifecycle and leaves the
+fixed-window direct aliasing to the following patch.
+
+Signed-off-by: Alireza Sanaee <alireza.sanaee@huawei.com>
+---
+ hw/cxl/cxl-mailbox-utils.c | 76 ++++++++++++++++++++++++++++++++++++--
+ 1 file changed, 73 insertions(+), 3 deletions(-)
+
+diff --git a/hw/cxl/cxl-mailbox-utils.c b/hw/cxl/cxl-mailbox-utils.c
+index c5427adb3a..cc7be6e68c 100644
+--- a/hw/cxl/cxl-mailbox-utils.c
++++ b/hw/cxl/cxl-mailbox-utils.c
+@@ -3668,6 +3668,28 @@ static CXLRetCode cxl_detect_malformed_extent_list(CXLType3Dev *ct3d,
+     return CXL_MBOX_SUCCESS;
+ }
+ 
++/* Find extent details (backend, window, tag, rid) in the first pending group */
++static bool cxl_extent_find_extent_detail(CXLDCExtentGroupList *list,
++                                          uint64_t start_dpa, uint64_t len,
++                                          uint8_t *tag, HostMemoryBackend **hmb,
++                                          struct CXLFixedWindow **fw, int *rid)
++{
++    CXLDCExtent *ent;
++    CXLDCExtentGroup *group = QTAILQ_FIRST(list);
++
++    QTAILQ_FOREACH(ent, &group->list, node) {
++        if (ent->start_dpa == start_dpa && ent->len == len) {
++            *fw = ent->fw;
++            *hmb = ent->hm;
++            memcpy(tag, ent->tag, 0x10);
++            *rid = ent->rid;
++            return true;
++        }
++    }
++
++    return false;
++}
++
+ static CXLRetCode cxl_dcd_add_dyn_cap_rsp_dry_run(CXLType3Dev *ct3d,
+         const CXLUpdateDCExtentListInPl *in)
+ {
+@@ -3718,8 +3740,12 @@ static CXLRetCode cmd_dcd_add_dyn_cap_rsp(const struct cxl_cmd *cmd,
+     CXLUpdateDCExtentListInPl *in = (void *)payload_in;
+     CXLType3Dev *ct3d = CXL_TYPE3(cci->d);
+     CXLDCExtentList *extent_list = &ct3d->dc.extents;
++    struct CXLFixedWindow *fw;
++    HostMemoryBackend *hmb_dc;
++    uint8_t tag[0x10];
+     uint32_t i, num;
+     uint64_t dpa, len;
++    int rid;
+     CXLRetCode ret;
+ 
+     if (len_in < sizeof(*in)) {
+@@ -3756,10 +3782,54 @@ static CXLRetCode cmd_dcd_add_dyn_cap_rsp(const struct cxl_cmd *cmd,
+     for (i = 0; i < in->num_entries_updated; i++) {
+         dpa = in->updated_entries[i].start_dpa;
+         len = in->updated_entries[i].len;
++        if (ct3d->dc.total_capacity_cmd) {
++            bool found;
++            MemoryRegion *mr;
++
++            found = cxl_extent_find_extent_detail(&ct3d->dc.extents_pending,
++                                                  dpa, len, tag,
++                                                  &hmb_dc, &fw, &rid);
++
++            /*
++             * Host accepted an extent where device lacks details including
++             * wrong DPA or wrong length.
++             */
++            if (!found) {
++                qemu_log_mask(LOG_GUEST_ERROR,
++                              "Could not find the extent detail for DPA 0x%"
++                              PRIx64 " LEN 0x%" PRIx64 "\n", dpa, len);
++                return CXL_MBOX_INVALID_PA;
++            }
++
++            /* The host memory backend should not be already mapped */
++            if (host_memory_backend_is_mapped(hmb_dc)) {
++                qemu_log_mask(LOG_GUEST_ERROR,
++                              "The host memory backend for DPA 0x%" PRIx64
++                              " LEN 0x%" PRIx64 " is already mapped\n",
++                              dpa, len);
++                return CXL_MBOX_INVALID_PA;
++            }
+ 
+-        cxl_insert_extent_to_extent_list(extent_list,
+-                                         NULL, NULL, dpa, len,
+-                                         NULL, 0, 0);
++            mr = host_memory_backend_get_memory(hmb_dc);
++            if (!mr) {
++                qemu_log_mask(LOG_GUEST_ERROR,
++                              "Could not get memory region from "
++                              "host memory backend\n");
++                return CXL_MBOX_INVALID_PA;
++            }
++
++            memory_region_set_nonvolatile(mr, false);
++            memory_region_set_enabled(mr, true);
++            host_memory_backend_set_mapped(hmb_dc, true);
++
++            cxl_insert_extent_to_extent_list(extent_list,
++                                             hmb_dc, fw, dpa, len,
++                                             NULL, 0, rid);
++        } else {
++            cxl_insert_extent_to_extent_list(extent_list,
++                                             NULL, NULL, dpa, len,
++                                             NULL, 0, -1);
++        }
+         ct3d->dc.total_extent_count += 1;
+         ct3d->dc.nr_extents_accepted += 1;
+         ct3_set_region_block_backed(ct3d, dpa, len);
+-- 
+2.50.1 (Apple Git-155)
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Received: from frasgout.his.huawei.com (frasgout.his.huawei.com [185.176.79.56])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 7465A2BDC32
+	for <linux-cxl@vger.kernel.org>; Wed, 25 Mar 2026 18:45:22 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=185.176.79.56
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1774464324; cv=none; b=Ov1f776j/seWviAUdLKzB8OEZZDraWP1XqOyuUEQpmUr4S4fbNrxYpPm8Y2fRRuyJPMlX8Q0y4sKA8yxUtZ552/hClsZ8chYvrk8ZJetmzskvKyP6oNn5zxvLatgTZkRcNrNsIcX0Qzbf2DFwo/I894ZUdI9RSiFaNyYxYUBpOg=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1774464324; c=relaxed/simple;
+	bh=6ZK6iWrzoDctVt3ifBsmTCwkNNZsccS7MvcEh+ra33Y=;
+	h=From:To:CC:Subject:Date:Message-ID:In-Reply-To:References:
+	 MIME-Version:Content-Type; b=UIJERhNzvXbWPokfQwMCal4ohuGGqhRJ4z+lXSC0GiZkIQZqT33WtSJuyacpynBHRniZx4kAm33kVokkvlrFbS7WIiinqL1zdiO3LeBEcJmbSQ/HvjadqSmB8eFsujuQK9neIntKOyB8wuazk0p7RqMnAV9ekDVG/xRExTJlpnY=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com; spf=pass smtp.mailfrom=huawei.com; arc=none smtp.client-ip=185.176.79.56
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=huawei.com
+Received: from mail.maildlp.com (unknown [172.18.224.107])
+	by frasgout.his.huawei.com (SkyGuard) with ESMTPS id 4fgwn86D3YzHnGdQ;
+	Thu, 26 Mar 2026 02:44:44 +0800 (CST)
+Received: from dubpeml500005.china.huawei.com (unknown [7.214.145.207])
+	by mail.maildlp.com (Postfix) with ESMTPS id ADC8A40587;
+	Thu, 26 Mar 2026 02:45:20 +0800 (CST)
+Received: from a2303103017.china.huawei.com (10.47.66.203) by
+ dubpeml500005.china.huawei.com (7.214.145.207) with Microsoft SMTP Server
+ (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id
+ 15.2.1544.11; Wed, 25 Mar 2026 18:45:19 +0000
+From: Alireza Sanaee <alireza.sanaee@huawei.com>
+To: <qemu-devel@nongnu.org>
+CC: <anisa.su@samsung.com>, <armbru@redhat.com>, <berrange@redhat.com>,
+	<eblake@redhat.com>, <jonathan.cameron@huawei.com>,
+	<linux-cxl@vger.kernel.org>, <linuxarm@huawei.com>, <lizhijian@fujitsu.com>,
+	<mst@redhat.com>, <pbonzini@redhat.com>, <gourry@gourry.net>,
+	<nifan.cxl@gmail.com>, <me@linux.beauty>
+Subject: [PATCH 4/9] hw/cxl: Carry backend metadata in DC extent records
+Date: Wed, 25 Mar 2026 18:42:52 +0000
+Message-ID: <20260325184259.366-5-alireza.sanaee@huawei.com>
+X-Mailer: git-send-email 2.51.0.windows.2
+In-Reply-To: <20260325184259.366-1-alireza.sanaee@huawei.com>
+References: <20260325184259.366-1-alireza.sanaee@huawei.com>
+Precedence: bulk
+X-Mailing-List: linux-cxl@vger.kernel.org
+List-Id: <linux-cxl.vger.kernel.org>
+List-Subscribe: <mailto:linux-cxl+subscribe@vger.kernel.org>
+List-Unsubscribe: <mailto:linux-cxl+unsubscribe@vger.kernel.org>
+MIME-Version: 1.0
+Content-Transfer-Encoding: 8bit
+Content-Type: text/plain
+X-ClientProxiedBy: lhrpeml500011.china.huawei.com (7.191.174.215) To
+ dubpeml500005.china.huawei.com (7.214.145.207)
+
+The lazy dc-regions-total-size flow needs more than DPA and length for each
+pending or committed extent. Later stages need to remember which backend
+was selected for the extent, which fixed window owns the mapping, and which
+region/offset the request came from.
+
+Extend CXLDCExtent and the helper APIs so add, copy, and release paths can
+carry that metadata alongside the range information.  This is preparatory
+plumbing for the patches that map accepted extents into the fixed window
+and tear them down on release.
+
+Signed-off-by: Alireza Sanaee <alireza.sanaee@huawei.com>
+---
+ hw/cxl/cxl-mailbox-utils.c  | 45 ++++++++++++++++++++++++++-----------
+ hw/mem/cxl_type3.c          | 23 ++++++++++++++-----
+ include/hw/cxl/cxl_device.h | 21 +++++++++++++----
+ 3 files changed, 67 insertions(+), 22 deletions(-)
+
+diff --git a/hw/cxl/cxl-mailbox-utils.c b/hw/cxl/cxl-mailbox-utils.c
+index c83b5f90d4..c5427adb3a 100644
+--- a/hw/cxl/cxl-mailbox-utils.c
++++ b/hw/cxl/cxl-mailbox-utils.c
+@@ -3525,20 +3525,26 @@ CXLDCRegion *cxl_find_dc_region(CXLType3Dev *ct3d, uint64_t dpa, uint64_t len)
+ }
+ 
+ void cxl_insert_extent_to_extent_list(CXLDCExtentList *list,
++                                             HostMemoryBackend *hm,
++                                             struct CXLFixedWindow *fw,
+                                              uint64_t dpa,
+                                              uint64_t len,
+                                              uint8_t *tag,
+-                                             uint16_t shared_seq)
++                                             uint16_t shared_seq,
++                                             int rid)
+ {
+     CXLDCExtent *extent;
+ 
+     extent = g_new0(CXLDCExtent, 1);
++    extent->hm = hm;
++    extent->fw = fw;
+     extent->start_dpa = dpa;
+     extent->len = len;
+     if (tag) {
+         memcpy(extent->tag, tag, 0x10);
+     }
+     extent->shared_seq = shared_seq;
++    extent->rid = rid;
+ 
+     QTAILQ_INSERT_TAIL(list, extent, node);
+ }
+@@ -3556,17 +3562,21 @@ void cxl_remove_extent_from_extent_list(CXLDCExtentList *list,
+  * Return value: the extent group where the extent is inserted.
+  */
+ CXLDCExtentGroup *cxl_insert_extent_to_extent_group(CXLDCExtentGroup *group,
++                                                    HostMemoryBackend *host_mem,
++                                                    struct CXLFixedWindow *fw,
+                                                     uint64_t dpa,
+                                                     uint64_t len,
+                                                     uint8_t *tag,
+-                                                    uint16_t shared_seq)
++                                                    uint16_t shared_seq,
++                                                    int rid)
+ {
+     if (!group) {
+         group = g_new0(CXLDCExtentGroup, 1);
+         QTAILQ_INIT(&group->list);
+     }
+-    cxl_insert_extent_to_extent_list(&group->list, dpa, len,
+-                                     tag, shared_seq);
++    cxl_insert_extent_to_extent_list(&group->list,
++                                     host_mem, fw, dpa, len,
++                                     tag, shared_seq, rid);
+     return group;
+ }
+ 
+@@ -3747,7 +3757,9 @@ static CXLRetCode cmd_dcd_add_dyn_cap_rsp(const struct cxl_cmd *cmd,
+         dpa = in->updated_entries[i].start_dpa;
+         len = in->updated_entries[i].len;
+ 
+-        cxl_insert_extent_to_extent_list(extent_list, dpa, len, NULL, 0);
++        cxl_insert_extent_to_extent_list(extent_list,
++                                         NULL, NULL, dpa, len,
++                                         NULL, 0, 0);
+         ct3d->dc.total_extent_count += 1;
+         ct3d->dc.nr_extents_accepted += 1;
+         ct3_set_region_block_backed(ct3d, dpa, len);
+@@ -3774,8 +3786,11 @@ static uint32_t copy_extent_list(CXLDCExtentList *dst,
+     }
+ 
+     QTAILQ_FOREACH(ent, src, node) {
+-        cxl_insert_extent_to_extent_list(dst, ent->start_dpa, ent->len,
+-                                         ent->tag, ent->shared_seq);
++        cxl_insert_extent_to_extent_list(dst,
++                                         ent->hm, ent->fw,
++                                         ent->start_dpa, ent->len,
++                                         ent->tag, ent->shared_seq,
++                                         ent->rid);
+         cnt++;
+     }
+     return cnt;
+@@ -3830,14 +3845,16 @@ static CXLRetCode cxl_dc_extent_release_dry_run(CXLType3Dev *ct3d,
+ 
+                     if (len1) {
+                         cxl_insert_extent_to_extent_list(updated_list,
+-                                                         ent_start_dpa,
+-                                                         len1, NULL, 0);
++                                                         NULL, NULL,
++                                                         ent_start_dpa, len1,
++                                                         NULL, 0, ent->rid);
+                         cnt_delta++;
+                     }
+                     if (len2) {
+                         cxl_insert_extent_to_extent_list(updated_list,
+-                                                         dpa + len,
+-                                                         len2, NULL, 0);
++                                                         NULL, NULL,
++                                                         dpa + len, len2,
++                                                         NULL, 0, ent->rid);
+                         cnt_delta++;
+                     }
+ 
+@@ -4310,9 +4327,11 @@ static CXLRetCode cmd_fm_initiate_dc_add(const struct cxl_cmd *cmd,
+             for (i = 0; i < in->ext_count; i++) {
+                 CXLDCExtentRaw *ext = &in->extents[i];
+ 
+-                group = cxl_insert_extent_to_extent_group(group, ext->start_dpa,
++                group = cxl_insert_extent_to_extent_group(group,
++                                                          NULL, NULL,
++                                                          ext->start_dpa,
+                                                           ext->len, ext->tag,
+-                                                          ext->shared_seq);
++                                                          ext->shared_seq, 0);
+             }
+ 
+             cxl_extent_group_list_insert_tail(&ct3d->dc.extents_pending, group);
+diff --git a/hw/mem/cxl_type3.c b/hw/mem/cxl_type3.c
+index 569184975f..bd32532c7a 100644
+--- a/hw/mem/cxl_type3.c
++++ b/hw/mem/cxl_type3.c
+@@ -2457,11 +2457,24 @@ static void qmp_cxl_process_dynamic_capacity_prescriptive(const char *path,
+         memcpy(extents[i].tag, &uuid.data, 0x10);
+         extents[i].shared_seq = 0;
+         if (type == DC_EVENT_ADD_CAPACITY) {
+-            group = cxl_insert_extent_to_extent_group(group,
+-                                                      extents[i].start_dpa,
+-                                                      extents[i].len,
+-                                                      extents[i].tag,
+-                                                      extents[i].shared_seq);
++            if (!dcd->dc.total_capacity_cmd) {
++                group = cxl_insert_extent_to_extent_group(group,
++                                                          NULL, NULL,
++                                                          extents[i].start_dpa,
++                                                          extents[i].len,
++                                                          extents[i].tag,
++                                                          extents[i].shared_seq,
++                                                          rid);
++            } else {
++                group = cxl_insert_extent_to_extent_group(group,
++                                                          dcd->dc.host_dc,
++                                                          dcd->dc.fw,
++                                                          extents[i].start_dpa,
++                                                          extents[i].len,
++                                                          extents[i].tag,
++                                                          extents[i].shared_seq,
++                                                          rid);
++            }
+         }
+ 
+         list = list->next;
+diff --git a/include/hw/cxl/cxl_device.h b/include/hw/cxl/cxl_device.h
+index 630cf44e0e..a84b8ab358 100644
+--- a/include/hw/cxl/cxl_device.h
++++ b/include/hw/cxl/cxl_device.h
+@@ -10,6 +10,7 @@
+ #ifndef CXL_DEVICE_H
+ #define CXL_DEVICE_H
+ 
++#include "hw/cxl/cxl.h"
+ #include "hw/cxl/cxl_component.h"
+ #include "hw/pci/pci_device.h"
+ #include "hw/core/register.h"
+@@ -643,11 +644,14 @@ typedef struct CXLDCExtentRaw {
+ } QEMU_PACKED CXLDCExtentRaw;
+ 
+ typedef struct CXLDCExtent {
++    HostMemoryBackend *hm;
++    struct CXLFixedWindow *fw;
+     uint64_t start_dpa;
+     uint64_t len;
+     uint8_t tag[0x10];
+     uint16_t shared_seq;
+     uint8_t rsvd[0x6];
++    int rid;
+ 
+     QTAILQ_ENTRY(CXLDCExtent) node;
+ } CXLDCExtent;
+@@ -780,6 +784,7 @@ struct CXLType3Dev {
+     struct dynamic_capacity {
+         HostMemoryBackend *host_dc;
+         AddressSpace host_dc_as;
++        struct CXLFixedWindow *fw;
+         /*
+          * total_capacity is equivalent to the dynamic capability
+          * memory region size.
+@@ -854,18 +859,26 @@ CXLDCRegion *cxl_find_dc_region(CXLType3Dev *ct3d, uint64_t dpa, uint64_t len);
+ 
+ void cxl_remove_extent_from_extent_list(CXLDCExtentList *list,
+                                         CXLDCExtent *extent);
+-void cxl_insert_extent_to_extent_list(CXLDCExtentList *list, uint64_t dpa,
+-                                      uint64_t len, uint8_t *tag,
+-                                      uint16_t shared_seq);
++void cxl_insert_extent_to_extent_list(CXLDCExtentList *list,
++                                      HostMemoryBackend *hm,
++                                      struct CXLFixedWindow *fw,
++                                      uint64_t dpa,
++                                      uint64_t len,
++                                      uint8_t *tag,
++                                      uint16_t shared_seq,
++                                      int rid);
+ bool test_any_bits_set(const unsigned long *addr, unsigned long nr,
+                        unsigned long size);
+ bool cxl_extents_contains_dpa_range(CXLDCExtentList *list,
+                                     uint64_t dpa, uint64_t len);
+ CXLDCExtentGroup *cxl_insert_extent_to_extent_group(CXLDCExtentGroup *group,
++                                                    HostMemoryBackend *host_mem,
++                                                    struct CXLFixedWindow *fw,
+                                                     uint64_t dpa,
+                                                     uint64_t len,
+                                                     uint8_t *tag,
+-                                                    uint16_t shared_seq);
++                                                    uint16_t shared_seq,
++                                                    int rid);
+ void cxl_extent_group_list_insert_tail(CXLDCExtentGroupList *list,
+                                        CXLDCExtentGroup *group);
+ uint32_t cxl_extent_group_list_delete_front(CXLDCExtentGroupList *list);
+-- 
+2.50.1 (Apple Git-155)
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Received: from frasgout.his.huawei.com (frasgout.his.huawei.com [185.176.79.56])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 39ED4318BA6
+	for <linux-cxl@vger.kernel.org>; Wed, 25 Mar 2026 18:44:49 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=185.176.79.56
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1774464291; cv=none; b=aTIWe99gxw9eRgMM4zXkXDefbs/nSl40m0zM8xkevawSWC/itjAANre3+nzUQ1zBnKCAcSeN0do3N/fFFnZDx4OI0TJQvlA6kcpWqaTCxGL01mZ5qeriMz8i7LPEWkMAKQynl3FJsUz5cHHN0RprYKOJgIUFgEqv0ySCzEeH+Ys=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1774464291; c=relaxed/simple;
+	bh=qBA/X+nldghfrRNr0Run9BdyHV58kWzmRCqgYsxkMTc=;
+	h=From:To:CC:Subject:Date:Message-ID:In-Reply-To:References:
+	 MIME-Version:Content-Type; b=PApL2OWK4zGi39q/T9Zd9/A/BQxmXiaN8BsCa3wyK8S/NIOYxGtBc2YEy8298Oa3a73lGd0qIiqbeX6sxW2X2psJ/sLJtRDZi8aApgpE+TKcNXQxQLqroTJNUQc4zsbwgwksL81hmYloBAs6ltFpUQyMJjhcTgVQFhyrQAcFZpI=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com; spf=pass smtp.mailfrom=huawei.com; arc=none smtp.client-ip=185.176.79.56
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=huawei.com
+Received: from mail.maildlp.com (unknown [172.18.224.150])
+	by frasgout.his.huawei.com (SkyGuard) with ESMTPS id 4fgwmW4qzZzHnGjr;
+	Thu, 26 Mar 2026 02:44:11 +0800 (CST)
+Received: from dubpeml500005.china.huawei.com (unknown [7.214.145.207])
+	by mail.maildlp.com (Postfix) with ESMTPS id 7F6D74056B;
+	Thu, 26 Mar 2026 02:44:47 +0800 (CST)
+Received: from a2303103017.china.huawei.com (10.47.66.203) by
+ dubpeml500005.china.huawei.com (7.214.145.207) with Microsoft SMTP Server
+ (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id
+ 15.2.1544.11; Wed, 25 Mar 2026 18:44:46 +0000
+From: Alireza Sanaee <alireza.sanaee@huawei.com>
+To: <qemu-devel@nongnu.org>
+CC: <anisa.su@samsung.com>, <armbru@redhat.com>, <berrange@redhat.com>,
+	<eblake@redhat.com>, <jonathan.cameron@huawei.com>,
+	<linux-cxl@vger.kernel.org>, <linuxarm@huawei.com>, <lizhijian@fujitsu.com>,
+	<mst@redhat.com>, <pbonzini@redhat.com>, <gourry@gourry.net>,
+	<nifan.cxl@gmail.com>, <me@linux.beauty>
+Subject: [PATCH 3/9] hw/cxl: Hook up tagged host memory backends at runtime for DC extents
+Date: Wed, 25 Mar 2026 18:42:51 +0000
+Message-ID: <20260325184259.366-4-alireza.sanaee@huawei.com>
+X-Mailer: git-send-email 2.51.0.windows.2
+In-Reply-To: <20260325184259.366-1-alireza.sanaee@huawei.com>
+References: <20260325184259.366-1-alireza.sanaee@huawei.com>
+Precedence: bulk
+X-Mailing-List: linux-cxl@vger.kernel.org
+List-Id: <linux-cxl.vger.kernel.org>
+List-Subscribe: <mailto:linux-cxl+subscribe@vger.kernel.org>
+List-Unsubscribe: <mailto:linux-cxl+unsubscribe@vger.kernel.org>
+MIME-Version: 1.0
+Content-Transfer-Encoding: 8bit
+Content-Type: text/plain
+X-ClientProxiedBy: lhrpeml500011.china.huawei.com (7.191.174.215) To
+ dubpeml500005.china.huawei.com (7.214.145.207)
+
+When a type3 device is created with dc-regions-total-size instead of an
+initial volatile-dc-memdev, prescriptive DC add requests need a way to name
+the backend to attach to the accepted extent.
+
+Teach the QMP and mailbox paths to carry that tag through the lazy
+dynamic-capacity flow. In the add path, resolve the tag to a generic host
+memory backend, reject reuse of an already-mapped backend, and verify that
+the backend size matches the requested extent.
+
+Store the selected backend metadata on the pending extent so a later patch
+can bind the accepted extent to the chosen backend when the host
+acknowledges the request.
+
+Signed-off-by: Alireza Sanaee <alireza.sanaee@huawei.com>
+---
+ hw/cxl/cxl-mailbox-utils.c |  8 ----
+ hw/mem/cxl_type3.c         | 77 ++++++++++++++++++++++++++++++++------
+ 2 files changed, 65 insertions(+), 20 deletions(-)
+
+diff --git a/hw/cxl/cxl-mailbox-utils.c b/hw/cxl/cxl-mailbox-utils.c
+index e6e136cf44..c83b5f90d4 100644
+--- a/hw/cxl/cxl-mailbox-utils.c
++++ b/hw/cxl/cxl-mailbox-utils.c
+@@ -4270,10 +4270,6 @@ static CXLRetCode cmd_fm_initiate_dc_add(const struct cxl_cmd *cmd,
+     CXLType3Dev *ct3d = CXL_TYPE3(cci->d);
+     int i, rc;
+ 
+-    if (ct3d->dc.total_capacity_cmd) {
+-        return CXL_MBOX_UNSUPPORTED;
+-    }
+-
+     switch (in->selection_policy) {
+         case CXL_EXTENT_SELECTION_POLICY_PRESCRIPTIVE: {
+             /* Adding extents exceeds device's extent tracking ability. */
+@@ -4361,10 +4357,6 @@ static CXLRetCode cmd_fm_initiate_dc_release(const struct cxl_cmd *cmd,
+     CXLType3Dev *ct3d = CXL_TYPE3(cci->d);
+     int i, rc;
+ 
+-    if (ct3d->dc.total_capacity_cmd) {
+-        return CXL_MBOX_UNSUPPORTED;
+-    }
+-
+     switch (in->flags & CXL_EXTENT_REMOVAL_POLICY_MASK) {
+         case CXL_EXTENT_REMOVAL_POLICY_PRESCRIPTIVE: {
+             CXLDCExtentList updated_list;
+diff --git a/hw/mem/cxl_type3.c b/hw/mem/cxl_type3.c
+index 45fb6c55bc..569184975f 100644
+--- a/hw/mem/cxl_type3.c
++++ b/hw/mem/cxl_type3.c
+@@ -30,6 +30,7 @@
+ #include "system/numa.h"
+ #include "hw/cxl/cxl.h"
+ #include "hw/pci/msix.h"
++#include "qemu/uuid.h"
+ 
+ /* type3 device private */
+ enum CXL_T3_MSIX_VECTOR {
+@@ -2289,13 +2290,42 @@ bool cxl_extent_groups_overlaps_dpa_range(CXLDCExtentGroupList *list,
+     return false;
+ }
+ 
++static bool cxl_device_lazy_dynamic_capacity_init(CXLType3Dev *ct3d,
++                                                  const char *tag,
++                                                  Error **errp)
++{
++    MemoryRegion *dc_mr;
++
++    ct3d->dc.host_dc = host_memory_backend_find_by_tag(tag);
++    if (!ct3d->dc.host_dc) {
++        error_setg(errp, "dynamic capacity must have a backing device");
++        return false;
++    }
++
++    dc_mr = host_memory_backend_get_memory(ct3d->dc.host_dc);
++    if (!dc_mr) {
++        error_setg(errp, "dynamic capacity must have a backing device");
++        return false;
++    }
++
++    if (host_memory_backend_is_mapped(ct3d->dc.host_dc)) {
++        error_setg(errp,
++                   "memory backend %s is already mapped and cannot be reused",
++                   object_get_canonical_path_component(
++                       OBJECT(ct3d->dc.host_dc)));
++        return false;
++    }
++
++    return true;
++}
++
+ /*
+  * The main function to process dynamic capacity event with extent list.
+  * Currently DC extents add/release requests are processed.
+  */
+ static void qmp_cxl_process_dynamic_capacity_prescriptive(const char *path,
+         uint16_t hid, CXLDCEventType type, uint8_t rid,
+-        CxlDynamicCapacityExtentList *records, Error **errp)
++        const char *tag, CxlDynamicCapacityExtentList *records, Error **errp)
+ {
+     Object *obj;
+     CXLType3Dev *dcd;
+@@ -2303,7 +2333,8 @@ static void qmp_cxl_process_dynamic_capacity_prescriptive(const char *path,
+     CxlDynamicCapacityExtentList *list;
+     CXLDCExtentGroup *group = NULL;
+     g_autofree CXLDCExtentRaw *extents = NULL;
+-    uint64_t dpa, offset, len, block_size;
++    uint64_t dpa, offset, block_size;
++    uint64_t len = 0;
+     g_autofree unsigned long *blk_bitmap = NULL;
+     int i;
+ 
+@@ -2319,13 +2350,6 @@ static void qmp_cxl_process_dynamic_capacity_prescriptive(const char *path,
+         return;
+     }
+ 
+-    if (dcd->dc.total_capacity_cmd) {
+-        error_setg(errp,
+-                   "dc-regions-total-size is set: extent add/release via QMP "
+-                   "not yet supported without a backing device at init");
+-        return;
+-    }
+-
+     if (rid >= dcd->dc.num_regions) {
+         error_setg(errp, "region id is too large");
+         return;
+@@ -2334,6 +2358,8 @@ static void qmp_cxl_process_dynamic_capacity_prescriptive(const char *path,
+     blk_bitmap = bitmap_new(dcd->dc.regions[rid].len / block_size);
+ 
+     /* Sanity check and count the extents */
++    QemuUUID uuid;
++    qemu_uuid_parse(tag, &uuid);
+     list = records;
+     while (list) {
+         offset = list->value->offset;
+@@ -2392,6 +2418,31 @@ static void qmp_cxl_process_dynamic_capacity_prescriptive(const char *path,
+         num_extents++;
+     }
+ 
++    if (type == DC_EVENT_ADD_CAPACITY && dcd->dc.total_capacity_cmd) {
++        MemoryRegion *host_dc_mr;
++        uint64_t size;
++
++        if (num_extents > 1) {
++            error_setg(errp, "Only single extent add is supported currently");
++            return;
++        }
++
++        if (!cxl_device_lazy_dynamic_capacity_init(dcd, tag, errp)) {
++            return;
++        }
++
++        host_dc_mr = host_memory_backend_get_memory(dcd->dc.host_dc);
++        size = memory_region_size(host_dc_mr);
++
++        if (size != len) {
++            error_setg(errp,
++                       "Host memory backend size 0x%" PRIx64
++                       " does not match extent length 0x%" PRIx64,
++                       size, len);
++            return;
++        }
++    }
++
+     /* Create extent list for event being passed to host */
+     i = 0;
+     list = records;
+@@ -2403,7 +2454,7 @@ static void qmp_cxl_process_dynamic_capacity_prescriptive(const char *path,
+ 
+         extents[i].start_dpa = dpa;
+         extents[i].len = len;
+-        memset(extents[i].tag, 0, 0x10);
++        memcpy(extents[i].tag, &uuid.data, 0x10);
+         extents[i].shared_seq = 0;
+         if (type == DC_EVENT_ADD_CAPACITY) {
+             group = cxl_insert_extent_to_extent_group(group,
+@@ -2434,7 +2485,8 @@ void qmp_cxl_add_dynamic_capacity(const char *path, uint16_t host_id,
+     case CXL_EXTENT_SELECTION_POLICY_PRESCRIPTIVE:
+         qmp_cxl_process_dynamic_capacity_prescriptive(path, host_id,
+                                                       DC_EVENT_ADD_CAPACITY,
+-                                                      region, extents, errp);
++                                                      region, tag,
++                                                      extents, errp);
+         return;
+     default:
+         error_setg(errp, "Selection policy not supported");
+@@ -2465,7 +2517,8 @@ void qmp_cxl_release_dynamic_capacity(const char *path, uint16_t host_id,
+     switch (removal_policy) {
+     case CXL_EXTENT_REMOVAL_POLICY_PRESCRIPTIVE:
+         qmp_cxl_process_dynamic_capacity_prescriptive(path, host_id, type,
+-                                                      region, extents, errp);
++                                                      region, tag,
++                                                      extents, errp);
+         return;
+     default:
+         error_setg(errp, "Removal policy not supported");
+-- 
+2.50.1 (Apple Git-155)
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Received: from frasgout.his.huawei.com (frasgout.his.huawei.com [185.176.79.56])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 26042334C28
+	for <linux-cxl@vger.kernel.org>; Wed, 25 Mar 2026 18:43:40 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=185.176.79.56
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1774464223; cv=none; b=W6cdyTFID2GCRER8qoJQw3Hu5JM2I0xGJ96lBV0FJFDrmzbn2Xo0WVz43Y4qOsii7vIbtX5VyFsLR3S4gA+HoG6ZAwuwAfkXIeDz1RNEO8gamgoI+6wYaaWHlKIk+097QM+8WxZUTxE2TfzBNOFnsQu5ClL+bNfU/MzXtQcviFY=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1774464223; c=relaxed/simple;
+	bh=+TUA7GSl+IadLzONgJCGlAsLkiXWBbN6tg4Gxfj1pXc=;
+	h=From:To:CC:Subject:Date:Message-ID:In-Reply-To:References:
+	 MIME-Version:Content-Type; b=Vy+WW4twNFmg2HZXqWcndHZcCCg9P9NV1DMVLpNzh/1SzJmTdnkuXmckiyjUiWpfPDZizJPgd44BuDJGMv0lpetmZQfBL4cHL3DZkfpN0onQZZZP732pAGAtTFAi87K9xM5JIsh7MB2v8wytVuXLQ7d5+HtS24VYQDME5LXvWvs=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com; spf=pass smtp.mailfrom=huawei.com; arc=none smtp.client-ip=185.176.79.56
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=huawei.com
+Received: from mail.maildlp.com (unknown [172.18.224.83])
+	by frasgout.his.huawei.com (SkyGuard) with ESMTPS id 4fgwlB5KS0zHnGhl;
+	Thu, 26 Mar 2026 02:43:02 +0800 (CST)
+Received: from dubpeml500005.china.huawei.com (unknown [7.214.145.207])
+	by mail.maildlp.com (Postfix) with ESMTPS id 8F53240086;
+	Thu, 26 Mar 2026 02:43:38 +0800 (CST)
+Received: from a2303103017.china.huawei.com (10.47.66.203) by
+ dubpeml500005.china.huawei.com (7.214.145.207) with Microsoft SMTP Server
+ (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id
+ 15.2.1544.11; Wed, 25 Mar 2026 18:43:37 +0000
+From: Alireza Sanaee <alireza.sanaee@huawei.com>
+To: <qemu-devel@nongnu.org>
+CC: <anisa.su@samsung.com>, <armbru@redhat.com>, <berrange@redhat.com>,
+	<eblake@redhat.com>, <jonathan.cameron@huawei.com>,
+	<linux-cxl@vger.kernel.org>, <linuxarm@huawei.com>, <lizhijian@fujitsu.com>,
+	<mst@redhat.com>, <pbonzini@redhat.com>, <gourry@gourry.net>,
+	<nifan.cxl@gmail.com>, <me@linux.beauty>
+Subject: [PATCH 1/9] hw/mem: Add tag support to generic host memory backends
+Date: Wed, 25 Mar 2026 18:42:49 +0000
+Message-ID: <20260325184259.366-2-alireza.sanaee@huawei.com>
+X-Mailer: git-send-email 2.51.0.windows.2
+In-Reply-To: <20260325184259.366-1-alireza.sanaee@huawei.com>
+References: <20260325184259.366-1-alireza.sanaee@huawei.com>
+Precedence: bulk
+X-Mailing-List: linux-cxl@vger.kernel.org
+List-Id: <linux-cxl.vger.kernel.org>
+List-Subscribe: <mailto:linux-cxl+subscribe@vger.kernel.org>
+List-Unsubscribe: <mailto:linux-cxl+unsubscribe@vger.kernel.org>
+MIME-Version: 1.0
+Content-Transfer-Encoding: 8bit
+Content-Type: text/plain
+X-ClientProxiedBy: lhrpeml500011.china.huawei.com (7.191.174.215) To
+ dubpeml500005.china.huawei.com (7.214.145.207)
+
+Add a string tag property to HostMemoryBackend so that backends can be
+identified by a user-assigned name at runtime. Expose the property through
+QOM and add a host_memory_backend_find_by_tag() helper that walks the
+object tree to locate a backend by its tag.
+
+This is used by the following CXL patches to resolve a named backend for a
+pending DC extent and attach it to the accepted extent when the host
+acknowledges the add request.
+
+Signed-off-by: Alireza Sanaee <alireza.sanaee@huawei.com>
+---
+ backends/hostmem.c       | 72 ++++++++++++++++++++++++++++++++++++++++
+ include/system/hostmem.h |  2 ++
+ qapi/qom.json            |  3 ++
+ tests/qtest/qom-test.c   |  8 +++--
+ 4 files changed, 83 insertions(+), 2 deletions(-)
+
+diff --git a/backends/hostmem.c b/backends/hostmem.c
+index 15d4365b69..270cae9569 100644
+--- a/backends/hostmem.c
++++ b/backends/hostmem.c
+@@ -47,6 +47,50 @@ host_memory_backend_get_name(HostMemoryBackend *backend)
+     return object_get_canonical_path(OBJECT(backend));
+ }
+ 
++typedef struct HostMemoryBackendTagSearch {
++    const char *tag;
++    HostMemoryBackend *backend;
++} HostMemoryBackendTagSearch;
++
++static int host_memory_backend_find_by_tag_cb(Object *obj, void *opaque)
++{
++    HostMemoryBackendTagSearch *ctx = opaque;
++    HostMemoryBackend *backend;
++
++    if (!object_dynamic_cast(obj, TYPE_MEMORY_BACKEND)) {
++        return 0;
++    }
++
++    backend = MEMORY_BACKEND(obj);
++    if (!backend->tag) {
++        return 0;
++    }
++
++    if (strcmp(backend->tag, ctx->tag) == 0) {
++        ctx->backend = backend;
++        return 1;
++    }
++
++    return 0;
++}
++
++HostMemoryBackend *host_memory_backend_find_by_tag(const char *tag)
++{
++    HostMemoryBackendTagSearch ctx = {
++        .tag = tag,
++        .backend = NULL,
++    };
++
++    if (!tag) {
++        return NULL;
++    }
++
++    object_child_foreach_recursive(object_get_objects_root(),
++                                   host_memory_backend_find_by_tag_cb, &ctx);
++
++    return ctx.backend;
++}
++
+ static void
+ host_memory_backend_get_size(Object *obj, Visitor *v, const char *name,
+                              void *opaque, Error **errp)
+@@ -460,6 +504,22 @@ static void host_memory_backend_set_share(Object *o, bool value, Error **errp)
+     backend->share = value;
+ }
+ 
++static void
++host_memory_backend_set_tag(Object *obj, const char *value, Error **errp)
++{
++    HostMemoryBackend *backend = MEMORY_BACKEND(obj);
++
++    g_free(backend->tag);
++    backend->tag = g_strdup(value);
++}
++
++static char *host_memory_backend_get_tag(Object *obj, Error **errp)
++{
++    HostMemoryBackend *backend = MEMORY_BACKEND(obj);
++
++    return g_strdup(backend->tag);
++}
++
+ #ifdef CONFIG_LINUX
+ static bool host_memory_backend_get_reserve(Object *o, Error **errp)
+ {
+@@ -501,6 +561,13 @@ host_memory_backend_set_use_canonical_path(Object *obj, bool value,
+     backend->use_canonical_path = value;
+ }
+ 
++static void host_memory_backend_finalize(Object *obj)
++{
++    HostMemoryBackend *backend = MEMORY_BACKEND(obj);
++
++    g_free(backend->tag);
++}
++
+ static void
+ host_memory_backend_class_init(ObjectClass *oc, const void *data)
+ {
+@@ -557,6 +624,10 @@ host_memory_backend_class_init(ObjectClass *oc, const void *data)
+         host_memory_backend_get_share, host_memory_backend_set_share);
+     object_class_property_set_description(oc, "share",
+         "Mark the memory as private to QEMU or shared");
++    object_class_property_add_str(oc, "tag",
++        host_memory_backend_get_tag, host_memory_backend_set_tag);
++    object_class_property_set_description(oc, "tag",
++        "A user-defined tag to identify this memory backend");
+ #ifdef CONFIG_LINUX
+     object_class_property_add_bool(oc, "reserve",
+         host_memory_backend_get_reserve, host_memory_backend_set_reserve);
+@@ -586,6 +657,7 @@ static const TypeInfo host_memory_backend_info = {
+     .class_init = host_memory_backend_class_init,
+     .instance_size = sizeof(HostMemoryBackend),
+     .instance_init = host_memory_backend_init,
++    .instance_finalize = host_memory_backend_finalize,
+     .instance_post_init = host_memory_backend_post_init,
+     .interfaces = (const InterfaceInfo[]) {
+         { TYPE_USER_CREATABLE },
+diff --git a/include/system/hostmem.h b/include/system/hostmem.h
+index 88fa791ac7..a02e173d48 100644
+--- a/include/system/hostmem.h
++++ b/include/system/hostmem.h
+@@ -81,12 +81,14 @@ struct HostMemoryBackend {
+     ThreadContext *prealloc_context;
+     DECLARE_BITMAP(host_nodes, MAX_NODES + 1);
+     HostMemPolicy policy;
++    char *tag;
+ 
+     MemoryRegion mr;
+ };
+ 
+ bool host_memory_backend_mr_inited(HostMemoryBackend *backend);
+ MemoryRegion *host_memory_backend_get_memory(HostMemoryBackend *backend);
++HostMemoryBackend *host_memory_backend_find_by_tag(const char *tag);
+ 
+ void host_memory_backend_set_mapped(HostMemoryBackend *backend, bool mapped);
+ bool host_memory_backend_is_mapped(HostMemoryBackend *backend);
+diff --git a/qapi/qom.json b/qapi/qom.json
+index c653248f85..e6feeb324a 100644
+--- a/qapi/qom.json
++++ b/qapi/qom.json
+@@ -658,6 +658,8 @@
+ # @reserve: if true, reserve swap space (or huge pages) if applicable
+ #     (default: true) (since 6.1)
+ #
++# @tag: user-defined memory backend tag (since 11.1)
++#
+ # @size: size of the memory region in bytes
+ #
+ # @x-use-canonical-path-for-ramblock-id: if true, the canonical path
+@@ -683,6 +685,7 @@
+             '*prealloc-context': 'str',
+             '*share': 'bool',
+             '*reserve': 'bool',
++            '*tag': 'str',
+             'size': 'size',
+             '*x-use-canonical-path-for-ramblock-id': 'bool' } }
+ 
+diff --git a/tests/qtest/qom-test.c b/tests/qtest/qom-test.c
+index 6421f2d9d9..3109b47cca 100644
+--- a/tests/qtest/qom-test.c
++++ b/tests/qtest/qom-test.c
+@@ -17,6 +17,7 @@
+ 
+ #define RAM_NAME "node0"
+ #define RAM_SIZE 65536
++#define RAM_TAG "ramtag0"
+ 
+ static int verbosity_level;
+ 
+@@ -59,6 +60,8 @@ static void test_list_get_value(QTestState *qts)
+ 
+         } else if (!strcmp(prop_name, "size")) {
+             g_assert_cmpint(qdict_get_int(prop, "value"), ==, RAM_SIZE);
++        } else if (!strcmp(prop_name, "tag")) {
++            g_assert_cmpstr(qdict_get_str(prop, "value"), ==, RAM_TAG);
+         }
+     }
+ }
+@@ -195,8 +198,9 @@ static void test_machine(gconstpointer data)
+     QTestState *qts;
+     g_autoptr(QList) paths = qlist_new();
+ 
+-    qts = qtest_initf("-machine %s -object memory-backend-ram,id=%s,size=%d",
+-                      machine, RAM_NAME, RAM_SIZE);
++    qts = qtest_initf("-machine %s -object memory-backend-ram,id=%s,size=%d"
++                      ",tag=%s",
++                      machine, RAM_NAME, RAM_SIZE, RAM_TAG);
+ 
+     if (g_test_slow()) {
+         /* Make sure we can get the machine class properties: */
+-- 
+2.50.1 (Apple Git-155)
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Received: from frasgout.his.huawei.com (frasgout.his.huawei.com [185.176.79.56])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id D1047334C28
+	for <linux-cxl@vger.kernel.org>; Wed, 25 Mar 2026 18:44:12 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=185.176.79.56
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1774464254; cv=none; b=Wskkr0FWhWM8fJLWa99NyzpEdB28ij7UXQ23mtaVhA7xt9VTrI5cj5F5gPNOVOPBRIkgKUjPIea6i95v91I35D56mp6E4D0oX7EBILzvmHebjHibLFsjkBuXRdeJxvISYiR9S/hkuIxvmFEmO8G6WSQQtCcaGMXBKGv6lQc8HMk=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1774464254; c=relaxed/simple;
+	bh=0iSYBNpmW2YIqQ7lCWfuwk6grAyVZ0zQeWmV3EDxxEI=;
+	h=From:To:CC:Subject:Date:Message-ID:In-Reply-To:References:
+	 MIME-Version:Content-Type; b=eGumS6Ya57PCRcNRMoWqxos5AQ80NcR+6znIDcjki9dCw6o+07jIJfuhAl/SNuUQLa/RGMXdOuRvfK9U8J54tXl+u8R6004eiT5nSslw9u27EG9JUFN05iwPYUcZJ39j2/Fw34C6A4AQiGPCDR1Zo+4bsGwZmw8FfWJs5qwQMTs=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com; spf=pass smtp.mailfrom=huawei.com; arc=none smtp.client-ip=185.176.79.56
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=huawei.com
+Received: from mail.maildlp.com (unknown [172.18.224.150])
+	by frasgout.his.huawei.com (SkyGuard) with ESMTPS id 4fgwlq03HMzHnGk0;
+	Thu, 26 Mar 2026 02:43:35 +0800 (CST)
+Received: from dubpeml500005.china.huawei.com (unknown [7.214.145.207])
+	by mail.maildlp.com (Postfix) with ESMTPS id CF7554056E;
+	Thu, 26 Mar 2026 02:44:10 +0800 (CST)
+Received: from a2303103017.china.huawei.com (10.47.66.203) by
+ dubpeml500005.china.huawei.com (7.214.145.207) with Microsoft SMTP Server
+ (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id
+ 15.2.1544.11; Wed, 25 Mar 2026 18:44:09 +0000
+From: Alireza Sanaee <alireza.sanaee@huawei.com>
+To: <qemu-devel@nongnu.org>
+CC: <anisa.su@samsung.com>, <armbru@redhat.com>, <berrange@redhat.com>,
+	<eblake@redhat.com>, <jonathan.cameron@huawei.com>,
+	<linux-cxl@vger.kernel.org>, <linuxarm@huawei.com>, <lizhijian@fujitsu.com>,
+	<mst@redhat.com>, <pbonzini@redhat.com>, <gourry@gourry.net>,
+	<nifan.cxl@gmail.com>, <me@linux.beauty>
+Subject: [PATCH 2/9] hw/cxl: Allow initializing type3 device with no backing device
+Date: Wed, 25 Mar 2026 18:42:50 +0000
+Message-ID: <20260325184259.366-3-alireza.sanaee@huawei.com>
+X-Mailer: git-send-email 2.51.0.windows.2
+In-Reply-To: <20260325184259.366-1-alireza.sanaee@huawei.com>
+References: <20260325184259.366-1-alireza.sanaee@huawei.com>
+Precedence: bulk
+X-Mailing-List: linux-cxl@vger.kernel.org
+List-Id: <linux-cxl.vger.kernel.org>
+List-Subscribe: <mailto:linux-cxl+subscribe@vger.kernel.org>
+List-Unsubscribe: <mailto:linux-cxl+unsubscribe@vger.kernel.org>
+MIME-Version: 1.0
+Content-Transfer-Encoding: 8bit
+Content-Type: text/plain
+X-ClientProxiedBy: lhrpeml500011.china.huawei.com (7.191.174.215) To
+ dubpeml500005.china.huawei.com (7.214.145.207)
+
+Add a dc-regions-total-size property that allows creating a CXL type3
+device with DC regions but without a backing memory device at init time. In
+Dynamic Capacity scenarios, memory can show up asynchronously from
+different resources (RAM, PMEM, file-backed).  For these cases, only the
+total DC size needs to be known upfront.
+
+When dc-regions-total-size is set (instead of volatile-dc-memdev), the
+device initializes DC regions using the specified total size but does not
+set up any backing memory. Any FMAPI or QMP command that attempts to add or
+release extents will fail with an error, since no backing device is
+available yet. The runtime hookup of tagged memory backends will be added
+in a subsequent patch.
+
+Signed-off-by: Alireza Sanaee <alireza.sanaee@huawei.com>
+---
+ hw/cxl/cxl-mailbox-utils.c  |  8 ++++
+ hw/mem/cxl_type3.c          | 92 ++++++++++++++++++++++---------------
+ include/hw/cxl/cxl_device.h |  1 +
+ 3 files changed, 65 insertions(+), 36 deletions(-)
+
+diff --git a/hw/cxl/cxl-mailbox-utils.c b/hw/cxl/cxl-mailbox-utils.c
+index c83b5f90d4..e6e136cf44 100644
+--- a/hw/cxl/cxl-mailbox-utils.c
++++ b/hw/cxl/cxl-mailbox-utils.c
+@@ -4270,6 +4270,10 @@ static CXLRetCode cmd_fm_initiate_dc_add(const struct cxl_cmd *cmd,
+     CXLType3Dev *ct3d = CXL_TYPE3(cci->d);
+     int i, rc;
+ 
++    if (ct3d->dc.total_capacity_cmd) {
++        return CXL_MBOX_UNSUPPORTED;
++    }
++
+     switch (in->selection_policy) {
+         case CXL_EXTENT_SELECTION_POLICY_PRESCRIPTIVE: {
+             /* Adding extents exceeds device's extent tracking ability. */
+@@ -4357,6 +4361,10 @@ static CXLRetCode cmd_fm_initiate_dc_release(const struct cxl_cmd *cmd,
+     CXLType3Dev *ct3d = CXL_TYPE3(cci->d);
+     int i, rc;
+ 
++    if (ct3d->dc.total_capacity_cmd) {
++        return CXL_MBOX_UNSUPPORTED;
++    }
++
+     switch (in->flags & CXL_EXTENT_REMOVAL_POLICY_MASK) {
+         case CXL_EXTENT_REMOVAL_POLICY_PRESCRIPTIVE: {
+             CXLDCExtentList updated_list;
+diff --git a/hw/mem/cxl_type3.c b/hw/mem/cxl_type3.c
+index d9fc0bec8f..45fb6c55bc 100644
+--- a/hw/mem/cxl_type3.c
++++ b/hw/mem/cxl_type3.c
+@@ -190,12 +190,15 @@ static int ct3_build_cdat_table(CDATSubHeader ***cdat_table, void *priv)
+     }
+ 
+     if (ct3d->dc.num_regions) {
+-        if (!ct3d->dc.host_dc) {
+-            return -EINVAL;
+-        }
+-        dc_mr = host_memory_backend_get_memory(ct3d->dc.host_dc);
+-        if (!dc_mr) {
+-            return -EINVAL;
++        /* Only check if DC is static (has a backing device) */
++        if (ct3d->dc.total_capacity_cmd == 0) {
++            if (!ct3d->dc.host_dc) {
++                return -EINVAL;
++            }
++            dc_mr = host_memory_backend_get_memory(ct3d->dc.host_dc);
++            if (!dc_mr) {
++                return -EINVAL;
++            }
+         }
+         len += CT3_CDAT_NUM_ENTRIES * ct3d->dc.num_regions;
+     }
+@@ -216,7 +219,7 @@ static int ct3_build_cdat_table(CDATSubHeader ***cdat_table, void *priv)
+         cur_ent += CT3_CDAT_NUM_ENTRIES;
+     }
+ 
+-    if (dc_mr) {
++    if (dc_mr || ct3d->dc.total_capacity_cmd) {
+         int i;
+         uint64_t region_base = vmr_size + pmr_size;
+ 
+@@ -651,8 +654,12 @@ static bool cxl_create_dc_regions(CXLType3Dev *ct3d, Error **errp)
+     MemoryRegion *mr;
+     uint64_t dc_size;
+ 
+-    mr = host_memory_backend_get_memory(ct3d->dc.host_dc);
+-    dc_size = memory_region_size(mr);
++    if (ct3d->dc.total_capacity_cmd != 0) {
++        dc_size = ct3d->dc.total_capacity_cmd;
++    } else {
++        mr = host_memory_backend_get_memory(ct3d->dc.host_dc);
++        dc_size = memory_region_size(mr);
++    }
+     region_len = DIV_ROUND_UP(dc_size, ct3d->dc.num_regions);
+ 
+     if (dc_size % (ct3d->dc.num_regions * CXL_CAPACITY_MULTIPLIER) != 0) {
+@@ -818,36 +825,41 @@ static bool cxl_setup_memory(CXLType3Dev *ct3d, Error **errp)
+         MemoryRegion *dc_mr;
+         char *dc_name;
+ 
+-        if (!ct3d->dc.host_dc) {
+-            error_setg(errp, "dynamic capacity must have a backing device");
+-            return false;
+-        }
++        /* Only require backing device if total_capacity_cmd is zero */
++        if (ct3d->dc.total_capacity_cmd == 0) {
++            if (!ct3d->dc.host_dc) {
++                error_setg(errp, "dynamic capacity must have a backing device");
++                return false;
++            }
+ 
+-        dc_mr = host_memory_backend_get_memory(ct3d->dc.host_dc);
+-        if (!dc_mr) {
+-            error_setg(errp, "dynamic capacity must have a backing device");
+-            return false;
+-        }
++            dc_mr = host_memory_backend_get_memory(ct3d->dc.host_dc);
++            if (!dc_mr) {
++                error_setg(errp, "dynamic capacity must have a backing device");
++                return false;
++            }
+ 
+-        if (host_memory_backend_is_mapped(ct3d->dc.host_dc)) {
+-            error_setg(errp, "memory backend %s can't be used multiple times.",
+-               object_get_canonical_path_component(OBJECT(ct3d->dc.host_dc)));
+-            return false;
+-        }
+-        /*
+-         * Set DC regions as volatile for now, non-volatile support can
+-         * be added in the future if needed.
+-         */
+-        memory_region_set_nonvolatile(dc_mr, false);
+-        memory_region_set_enabled(dc_mr, true);
+-        host_memory_backend_set_mapped(ct3d->dc.host_dc, true);
+-        if (ds->id) {
+-            dc_name = g_strdup_printf("cxl-dcd-dpa-dc-space:%s", ds->id);
+-        } else {
+-            dc_name = g_strdup("cxl-dcd-dpa-dc-space");
++            if (host_memory_backend_is_mapped(ct3d->dc.host_dc)) {
++                error_setg(errp,
++                           "memory backend %s can't be used multiple times.",
++                           object_get_canonical_path_component(
++                               OBJECT(ct3d->dc.host_dc)));
++                return false;
++            }
++            /*
++             * Set DC regions as volatile for now, non-volatile support can
++             * be added in the future if needed.
++             */
++            memory_region_set_nonvolatile(dc_mr, false);
++            memory_region_set_enabled(dc_mr, true);
++            host_memory_backend_set_mapped(ct3d->dc.host_dc, true);
++            if (ds->id) {
++                dc_name = g_strdup_printf("cxl-dcd-dpa-dc-space:%s", ds->id);
++            } else {
++                dc_name = g_strdup("cxl-dcd-dpa-dc-space");
++            }
++            address_space_init(&ct3d->dc.host_dc_as, dc_mr, dc_name);
++            g_free(dc_name);
+         }
+-        address_space_init(&ct3d->dc.host_dc_as, dc_mr, dc_name);
+-        g_free(dc_name);
+ 
+         if (!cxl_create_dc_regions(ct3d, errp)) {
+             error_append_hint(errp, "setup DC regions failed");
+@@ -1361,6 +1373,8 @@ static const Property ct3_props[] = {
+     DEFINE_PROP_UINT8("num-dc-regions", CXLType3Dev, dc.num_regions, 0),
+     DEFINE_PROP_LINK("volatile-dc-memdev", CXLType3Dev, dc.host_dc,
+                      TYPE_MEMORY_BACKEND, HostMemoryBackend *),
++    DEFINE_PROP_SIZE("dc-regions-total-size", CXLType3Dev,
++                     dc.total_capacity_cmd, 0),
+     DEFINE_PROP_PCIE_LINK_SPEED("x-speed", CXLType3Dev,
+                                 speed, PCIE_LINK_SPEED_32),
+     DEFINE_PROP_PCIE_LINK_WIDTH("x-width", CXLType3Dev,
+@@ -2305,6 +2319,12 @@ static void qmp_cxl_process_dynamic_capacity_prescriptive(const char *path,
+         return;
+     }
+ 
++    if (dcd->dc.total_capacity_cmd) {
++        error_setg(errp,
++                   "dc-regions-total-size is set: extent add/release via QMP "
++                   "not yet supported without a backing device at init");
++        return;
++    }
+ 
+     if (rid >= dcd->dc.num_regions) {
+         error_setg(errp, "region id is too large");
+diff --git a/include/hw/cxl/cxl_device.h b/include/hw/cxl/cxl_device.h
+index ba551fa5f9..630cf44e0e 100644
+--- a/include/hw/cxl/cxl_device.h
++++ b/include/hw/cxl/cxl_device.h
+@@ -785,6 +785,7 @@ struct CXLType3Dev {
+          * memory region size.
+          */
+         uint64_t total_capacity; /* 256M aligned */
++        uint64_t total_capacity_cmd; /* 256M aligned */
+         CXLDCExtentList extents;
+         CXLDCExtentGroupList extents_pending;
+         uint32_t total_extent_count;
+-- 
+2.50.1 (Apple Git-155)
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Received: from frasgout.his.huawei.com (frasgout.his.huawei.com [185.176.79.56])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id D96A333B6F4
+	for <linux-cxl@vger.kernel.org>; Wed, 25 Mar 2026 18:43:07 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=185.176.79.56
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1774464190; cv=none; b=O8qShrZ7X1UH4xpZbpfJUCC8o//coFCMzBswmj3fec6fVacdo78PqqHiyymIZVcA+2q0MSDzcJEbMWfG4SN3+wG2MIKd4LL+gedBvfEVYygaWpNo0g9CzW12zmz3FLKGFqF5KSV4l6xFb4BmB9PhWA/NyuCXQlFoI9Sn2g8jLK4=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1774464190; c=relaxed/simple;
+	bh=9Ev+Vywr8Qvo2rFACrBCMUBkLphLxMmppeuXBF2kLSM=;
+	h=From:To:CC:Subject:Date:Message-ID:MIME-Version:Content-Type; b=WjOLyLt7rfAA5pSs+jJYcVyzZtTDToN3iZeEljwTTBBEiwi+N0uxiiOs5afxCUODhOWpoiFBgfl/c65VMZn7YlOYlEWP7iNvT8/d0EzzlHMeRXNJmDMYw29UDo00V0nBGt7H645L+SIABGUmTLVaAwIcwwuoFNUUT1sorps06fY=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com; spf=pass smtp.mailfrom=huawei.com; arc=none smtp.client-ip=185.176.79.56
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=huawei.com
+Received: from mail.maildlp.com (unknown [172.18.224.107])
+	by frasgout.his.huawei.com (SkyGuard) with ESMTPS id 4fgwl43pFjzJ46F4;
+	Thu, 26 Mar 2026 02:42:56 +0800 (CST)
+Received: from dubpeml500005.china.huawei.com (unknown [7.214.145.207])
+	by mail.maildlp.com (Postfix) with ESMTPS id 78CD340584;
+	Thu, 26 Mar 2026 02:43:05 +0800 (CST)
+Received: from a2303103017.china.huawei.com (10.47.66.203) by
+ dubpeml500005.china.huawei.com (7.214.145.207) with Microsoft SMTP Server
+ (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id
+ 15.2.1544.11; Wed, 25 Mar 2026 18:43:04 +0000
+From: Alireza Sanaee <alireza.sanaee@huawei.com>
+To: <qemu-devel@nongnu.org>
+CC: <anisa.su@samsung.com>, <armbru@redhat.com>, <berrange@redhat.com>,
+	<eblake@redhat.com>, <jonathan.cameron@huawei.com>,
+	<linux-cxl@vger.kernel.org>, <linuxarm@huawei.com>, <lizhijian@fujitsu.com>,
+	<mst@redhat.com>, <pbonzini@redhat.com>, <gourry@gourry.net>,
+	<nifan.cxl@gmail.com>, <me@linux.beauty>
+Subject: [QEMU PATCH 0/9] Application Specific Tagged Memory Support in CXL Type 3 Devices
+Date: Wed, 25 Mar 2026 18:42:48 +0000
+Message-ID: <20260325184259.366-1-alireza.sanaee@huawei.com>
+X-Mailer: git-send-email 2.51.0.windows.2
+Precedence: bulk
+X-Mailing-List: linux-cxl@vger.kernel.org
+List-Id: <linux-cxl.vger.kernel.org>
+List-Subscribe: <mailto:linux-cxl+subscribe@vger.kernel.org>
+List-Unsubscribe: <mailto:linux-cxl+unsubscribe@vger.kernel.org>
+MIME-Version: 1.0
+Content-Transfer-Encoding: 8bit
+Content-Type: text/plain
+X-ClientProxiedBy: lhrpeml500011.china.huawei.com (7.191.174.215) To
+ dubpeml500005.china.huawei.com (7.214.145.207)
+
+Hi,
+
+This series is a rework of the earlier RFC posted at:
+https://lore.kernel.org/all/20251127225526.700-1-alireza.sanaee@huawei.com/
+
+The overall goal is still to support application-specific tagged memory
+for CXL Type 3 dynamic capacity, but the backend model is now different.
+
+The earlier RFC introduced a dedicated tagged memory backend object.
+This version does not. Instead, the first patch adds a `tag` property
+to generic host memory backends, and the rest of the series teaches the
+CXL Type 3 DC flow to find and hook up those tagged backends lazily at
+runtime.
+
+In practice, a device may now be created with `dc-regions-total-size`
+and no `volatile-dc-memdev`. When add-capacity is requested with a tag,
+the tagged host memory backend is looked up, validated, and only mapped
+after host acceptance. The committed extent keeps the backend and fixed
+window metadata so that:
+
+ - direct alias mapping can be installed for the performant path,
+ - teardown can happen correctly at release time, and
+ - tag-based removal can locate and release extents by tag.
+
+Assumptions, limitations and reasons behind it:
+
+ 1. Each lazy-backed extent maps to exactly one tagged host memory
+    backend. In VM scenarios, we just need to add a backend which has
+    one extent representing the entire backend tied to one region. If
+    more extents required then more regions can be added.
+ 2. Partial release of a backend-backed extent is rejected. If a
+    backend is represented by the one extent then partial release of
+    a region does not makes sense.
+ 3. The current lazy flow only supports a single extent per add
+    request. This can be changed if required later.
+
+This series contains:
+
+ - add generic host memory backend tag support;
+ - allow creating DC-only Type 3 devices with total capacity but no
+   backing device at init time;
+ - wire tagged host memory backends into the DC add flow;
+ - store per-extent backend and fixed-window metadata;
+ - map the backend after host acceptance;
+ - add the direct alias fast path for accesses;
+ - tear down aliases and lazy mappings on release;
+ - add tag-based removal support; and
+ - add a status QMP helper for orchestration layers.
+
+Tested with two tagged `memory-backend-ram` objects and QMP-driven add
+and release flows, including tag-based release.
+
+Example flow
+============
+
+Below is a short tutorial-style example based on the earlier RFC, but
+updated for the current design where generic host memory backends carry
+the tag.
+
+1. Start QEMU with a Type 3 device that advertises dynamic capacity via
+   `dc-regions-total-size`, without an initial `volatile-dc-memdev`.
+
+   -device cxl-type3,bus=root_port13,id=cxl-vmem0,num-dc-regions=1, \
+           dc-regions-total-size=4G
+
+2. Create tagged backends at runtime with QMP:
+
+{
+    "execute": "object-add",
+    "arguments": {
+        "qom-type": "memory-backend-ram",
+        "id": "tm0",
+        "size": 1073741824,
+        "share": true,
+        "tag": "5be13bce-ae34-4a77-b6c3-16df975fcf1a"
+    }
+}
+
+{
+    "execute": "object-add",
+    "arguments": {
+        "qom-type": "memory-backend-ram",
+        "id": "tm1",
+        "size": 1073741824,
+        "share": true,
+        "tag": "6be13bce-ae34-4a77-b6c3-16df975fcf1a"
+    }
+}
+
+3. Add capacity by tag:
+
+{
+    "execute": "cxl-add-dynamic-capacity",
+    "arguments": {
+        "path": "/machine/peripheral/cxl-vmem0",
+        "host-id": 0,
+        "selection-policy": "prescriptive",
+        "region": 0,
+        "tag": "5be13bce-ae34-4a77-b6c3-16df975fcf1a",
+        "extents": [
+            {
+                "offset": 0,
+                "len": 1073741824
+            }
+        ]
+    }
+}
+
+After the host accepts the extent, the tagged backend is mapped and the
+direct alias path becomes active for the committed extent.
+
+4. Release by tag:
+
+{
+    "execute": "cxl-release-dynamic-capacity",
+    "arguments": {
+        "path": "/machine/peripheral/cxl-vmem0",
+        "host-id": 0,
+        "removal-policy": "tag-based",
+        "tag": "5be13bce-ae34-4a77-b6c3-16df975fcf1a",
+        "region": 0,
+        "extents": [
+            {
+                "offset": 0,
+                "len": 1073741824
+            }
+        ]
+    }
+}
+
+5. Query whether the tagged extent is still present:
+
+{
+    "execute": "cxl-release-dynamic-capacity-status",
+    "arguments": {
+        "path": "/machine/peripheral/cxl-vmem0",
+        "host-id": 0,
+        "tag": "5be13bce-ae34-4a77-b6c3-16df975fcf1a",
+        "region": 0
+    }
+}
+
+For the Ira patchset from Intel, I allowed UUIDs in the kernel-side
+flow, and that change is available here:
+https://github.com/sarsanaee/linux/tree/allow_uuid_ira
+
+Depends-on:
+https://lore.kernel.org/all/20260318171918.146-1-alireza.sanaee@huawei.com/
+
+Depends-on:
+https://lore.kernel.org/all/20250413-dcd-type2-upstream-v9-0-1d4911a0b365@intel.com/
+
+--
+Alireza Sanaee
+
+Alireza Sanaee (9):
+  hw/mem: Add tag support to generic host memory backends
+  hw/cxl: Allow initializing type3 device with no backing device
+  hw/cxl: Hook up tagged host memory backends at runtime for DC extents
+  hw/cxl: Carry backend metadata in DC extent records
+  hw/cxl: Map lazy memory backend after host acceptance
+  hw/cxl: Create direct fixed-window aliases for accepted extents
+  hw/cxl: Add release-time teardown for direct-mapped extents
+  hw/cxl: Add tag-based dynamic-capacity release support
+  hw/cxl: Add QMP status query for dynamic-capacity extent release
+
+ backends/hostmem.c          |  72 +++++++
+ hw/cxl/cxl-host.c           |   6 +
+ hw/cxl/cxl-mailbox-utils.c  | 223 ++++++++++++++++++++--
+ hw/mem/cxl_type3.c          | 361 +++++++++++++++++++++++++++++++-----
+ hw/mem/cxl_type3_stubs.c    |  10 +
+ include/hw/cxl/cxl_device.h |  41 +++-
+ include/system/hostmem.h    |   2 +
+ qapi/cxl.json               |  46 +++++
+ qapi/qom.json               |   3 +
+ tests/qtest/qom-test.c      |   8 +-
+ 10 files changed, 703 insertions(+), 69 deletions(-)
+
+-- 
+2.50.1 (Apple Git-155)
+
+
