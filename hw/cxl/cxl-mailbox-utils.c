@@ -3567,7 +3567,8 @@ void cxl_insert_extent_to_extent_list(CXLDCExtentList *list,
                                              uint8_t *tag,
                                              uint16_t shared_seq,
                                              int rid,
-                                             uint64_t offset)
+                                             uint64_t offset,
+                                             int direct_window_idx)
 {
     CXLDCExtent *extent;
 
@@ -3582,6 +3583,7 @@ void cxl_insert_extent_to_extent_list(CXLDCExtentList *list,
     }
     extent->shared_seq = shared_seq;
     extent->rid = rid;
+    extent->direct_window_idx = direct_window_idx;
 
     QTAILQ_INSERT_TAIL(list, extent, node);
 }
@@ -3606,7 +3608,8 @@ CXLDCExtentGroup *cxl_insert_extent_to_extent_group(CXLDCExtentGroup *group,
                                                     uint8_t *tag,
                                                     uint16_t shared_seq,
                                                     int rid,
-                                                    uint64_t offset)
+                                                    uint64_t offset,
+                                                    int direct_window_idx)
 {
     if (!group) {
         group = g_new0(CXLDCExtentGroup, 1);
@@ -3614,7 +3617,8 @@ CXLDCExtentGroup *cxl_insert_extent_to_extent_group(CXLDCExtentGroup *group,
     }
     cxl_insert_extent_to_extent_list(&group->list,
                                      host_mem, fw, dpa, len,
-                                     tag, shared_seq, rid, offset);
+                                     tag, shared_seq, rid, offset,
+                                     direct_window_idx);
     return group;
 }
 
@@ -3712,6 +3716,25 @@ static bool cxl_extent_find_extent_detail(CXLDCExtentGroupList *list,
     }
 
     return false;
+}
+
+static void cxl_unmap_extent_backend(CXLDCExtent *ent)
+{
+    MemoryRegion *mr;
+
+    if (!ent->hm) {
+        return;
+    }
+
+    mr = host_memory_backend_get_memory(ent->hm);
+    if (!mr) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "Could not get memory region from host memory backend\n");
+        return;
+    }
+
+    memory_region_set_enabled(mr, false);
+    host_memory_backend_set_mapped(ent->hm, false);
 }
 
 static CXLRetCode cxl_dcd_add_dyn_cap_rsp_dry_run(CXLType3Dev *ct3d,
@@ -3876,11 +3899,12 @@ static CXLRetCode cmd_dcd_add_dyn_cap_rsp(const struct cxl_cmd *cmd,
 
             cxl_insert_extent_to_extent_list(extent_list,
                                              hmb_dc, fw, dpa, len,
-                                             tag, 0, rid, offset);
+                                             tag, 0, rid, offset, mr_idx);
         } else {
             cxl_insert_extent_to_extent_list(extent_list,
                                              NULL, NULL, dpa, len,
-                                             NULL, 0, -1, (uint64_t)-1);
+                                             NULL, 0, -1,
+                                             (uint64_t)-1, -1);
         }
         ct3d->dc.total_extent_count += 1;
         ct3d->dc.nr_extents_accepted += 1;
@@ -3918,7 +3942,8 @@ static uint32_t copy_extent_list(CXLDCExtentList *dst,
                                          ent->hm, ent->fw,
                                          ent->start_dpa, ent->len,
                                          ent->tag, ent->shared_seq,
-                                         ent->rid, ent->offset);
+                                         ent->rid, ent->offset,
+                                         ent->direct_window_idx);
         cnt++;
     }
     return cnt;
@@ -3926,6 +3951,7 @@ static uint32_t copy_extent_list(CXLDCExtentList *dst,
 
 static CXLRetCode cxl_dc_extent_release_dry_run(CXLType3Dev *ct3d,
         const CXLUpdateDCExtentListInPl *in, CXLDCExtentList *updated_list,
+        CXLDCExtentList *updated_removed_list,
         uint32_t *updated_list_size)
 {
     CXLDCExtent *ent, *ent_next;
@@ -3936,6 +3962,9 @@ static CXLRetCode cxl_dc_extent_release_dry_run(CXLType3Dev *ct3d,
     CXLRetCode ret = CXL_MBOX_SUCCESS;
 
     QTAILQ_INIT(updated_list);
+    if (updated_removed_list) {
+        QTAILQ_INIT(updated_removed_list);
+    }
     copy_extent_list(updated_list, &ct3d->dc.extents);
 
     for (i = 0; i < in->num_entries_updated; i++) {
@@ -3976,25 +4005,44 @@ static CXLRetCode cxl_dc_extent_release_dry_run(CXLType3Dev *ct3d,
                     }
                     len_done = ent_len - len1 - len2;
 
+                    /*
+                     * Tagged backends are mapped one-backend-per-extent.
+                     * Partial release would leave a backend-backed extent
+                     * behind without a clean backend lifecycle.
+                     */
+                    if (ent->hm && (len1 || len2)) {
+                        ret = CXL_MBOX_INVALID_INPUT;
+                        goto free_and_exit;
+                    }
+
+                    /* Cannot split extents with direct window mapping */
+                    if (ent->direct_window_idx >= 0 && (len1 || len2)) {
+                        ret = CXL_MBOX_INVALID_INPUT;
+                        goto free_and_exit;
+                    }
+
+                    if (updated_removed_list) {
+                        cxl_insert_extent_to_extent_list(
+                            updated_removed_list, ent->hm, ent->fw,
+                            ent->start_dpa, ent->len, ent->tag, ent->shared_seq,
+                            ent->rid, ent->offset, ent->direct_window_idx);
+                    }
+
                     cxl_remove_extent_from_extent_list(updated_list, ent);
                     cnt_delta--;
 
                     if (len1) {
-                        cxl_insert_extent_to_extent_list(updated_list,
-                                                         NULL, NULL,
-                                                         ent_start_dpa, len1,
-                                                         ent->tag, 0,
-                                                         ent->rid,
-                                                         ent->offset);
+                        cxl_insert_extent_to_extent_list(
+                            updated_list, NULL, NULL,
+                            ent_start_dpa, len1, ent->tag, 0,
+                            ent->rid, ent->offset, ent->direct_window_idx);
                         cnt_delta++;
                     }
                     if (len2) {
-                        cxl_insert_extent_to_extent_list(updated_list,
-                                                         NULL, NULL,
-                                                         dpa + len, len2,
-                                                         ent->tag, 0,
-                                                         ent->rid,
-                                                         ent->offset);
+                        cxl_insert_extent_to_extent_list(
+                            updated_list, NULL, NULL,
+                            dpa + len, len2, ent->tag, 0,
+                            ent->rid, ent->offset, ent->direct_window_idx);
                         cnt_delta++;
                     }
 
@@ -4037,6 +4085,7 @@ static CXLRetCode cmd_dcd_release_dyn_cap(const struct cxl_cmd *cmd,
     CXLType3Dev *ct3d = CXL_TYPE3(cci->d);
     CXLType3Class *cvc = CXL_TYPE3_GET_CLASS(ct3d);
     CXLDCExtentList updated_list;
+    CXLDCExtentList updated_removed_list;
     CXLDCExtent *ent, *ent_next;
     uint32_t updated_list_size, i;
     uint64_t dpa, len;
@@ -4061,9 +4110,24 @@ static CXLRetCode cmd_dcd_release_dyn_cap(const struct cxl_cmd *cmd,
     }
 
     ret = cxl_dc_extent_release_dry_run(ct3d, in, &updated_list,
+                                        &updated_removed_list,
                                         &updated_list_size);
     if (ret != CXL_MBOX_SUCCESS) {
         return ret;
+    }
+
+    if (ct3d->direct_mr_enabled) {
+        /* Remove memory alias for the removed extents */
+        QTAILQ_FOREACH_SAFE(ent, &updated_removed_list, node, ent_next) {
+            cxl_remove_memory_alias(ct3d, ent->fw, ent->direct_window_idx);
+            cxl_unmap_extent_backend(ent);
+            cxl_remove_extent_from_extent_list(&updated_removed_list, ent);
+        }
+    } else {
+        QTAILQ_FOREACH_SAFE(ent, &updated_removed_list, node, ent_next) {
+            cxl_unmap_extent_backend(ent);
+            cxl_remove_extent_from_extent_list(&updated_removed_list, ent);
+        }
     }
 
     /* Updated_entries contains the released extents. Free those in the MHD */
@@ -4508,7 +4572,7 @@ static CXLRetCode cmd_fm_initiate_dc_add(const struct cxl_cmd *cmd,
                                                           ext->start_dpa,
                                                           ext->len, ext->tag,
                                                           ext->shared_seq, 0,
-                                                          (uint64_t)-1);
+                                                          (uint64_t)-1, -1);
             }
 
             cxl_extent_group_list_insert_tail(&ct3d->dc.extents_pending, group);
@@ -4590,6 +4654,7 @@ static CXLRetCode cmd_fm_initiate_dc_release(const struct cxl_cmd *cmd,
             rc = cxl_dc_extent_release_dry_run(ct3d,
                                                list,
                                                &updated_list,
+                                               NULL,
                                                &updated_list_size);
             if (rc) {
                 return rc;

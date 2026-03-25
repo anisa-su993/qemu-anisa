@@ -2543,7 +2543,8 @@ static void qmp_cxl_process_dynamic_capacity_prescriptive(const char *path,
                                                           extents[i].tag,
                                                           extents[i].shared_seq,
                                                           rid,
-                                                          offset);
+                                                          offset,
+                                                          0);
             } else {
                 group = cxl_insert_extent_to_extent_group(group,
                                                           dcd->dc.host_dc,
@@ -2553,7 +2554,8 @@ static void qmp_cxl_process_dynamic_capacity_prescriptive(const char *path,
                                                           extents[i].tag,
                                                           extents[i].shared_seq,
                                                           rid,
-                                                          offset);
+                                                          offset,
+                                                          0);
             }
         }
 
@@ -2617,6 +2619,37 @@ void qmp_cxl_release_dynamic_capacity(const char *path, uint16_t host_id,
         error_setg(errp, "Removal policy not supported");
         return;
     }
+}
+
+void cxl_remove_memory_alias(CXLType3Dev *dcd, struct CXLFixedWindow *fw,
+                             int hdm_id)
+{
+    MemoryRegion *mr;
+
+    if (hdm_id < 0 || hdm_id >= CXL_DC_MAX_DIRECT_MR) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "Invalid direct window index %d\n", hdm_id);
+        return;
+    }
+
+    if (dcd->dc.total_capacity_cmd > 0) {
+        mr = &dcd->dc.dc_direct_mr[hdm_id];
+    } else {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "No dynamic capacity command support, "
+                      "cannot remove memory region alias\n");
+        return;
+    }
+
+    if (!fw) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "Cannot remove memory region alias "
+                      "without a valid fixed window\n");
+        return;
+    }
+
+    memory_region_del_subregion(&fw->mr, mr);
+    dcd->dc.direct_mr_bitmap &= ~(1u << hdm_id);
 }
 
 static void ct3_class_init(ObjectClass *oc, const void *data)
