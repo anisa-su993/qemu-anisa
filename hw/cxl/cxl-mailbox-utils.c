@@ -3687,6 +3687,28 @@ static CXLRetCode cxl_detect_malformed_extent_list(CXLType3Dev *ct3d,
     return CXL_MBOX_SUCCESS;
 }
 
+/* Find extent details (backend, window, tag, rid) in the first pending group */
+static bool cxl_extent_find_extent_detail(CXLDCExtentGroupList *list,
+                                          uint64_t start_dpa, uint64_t len,
+                                          uint8_t *tag, HostMemoryBackend **hmb,
+                                          struct CXLFixedWindow **fw, int *rid)
+{
+    CXLDCExtent *ent;
+    CXLDCExtentGroup *group = QTAILQ_FIRST(list);
+
+    QTAILQ_FOREACH(ent, &group->list, node) {
+        if (ent->start_dpa == start_dpa && ent->len == len) {
+            *fw = ent->fw;
+            *hmb = ent->hm;
+            memcpy(tag, ent->tag, 0x10);
+            *rid = ent->rid;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static CXLRetCode cxl_dcd_add_dyn_cap_rsp_dry_run(CXLType3Dev *ct3d,
         const CXLUpdateDCExtentListInPl *in)
 {
@@ -3738,8 +3760,12 @@ static CXLRetCode cmd_dcd_add_dyn_cap_rsp(const struct cxl_cmd *cmd,
     CXLType3Dev *ct3d = CXL_TYPE3(cci->d);
     CXLType3Class *cvc = CXL_TYPE3_GET_CLASS(ct3d);
     CXLDCExtentList *extent_list = &ct3d->dc.extents;
+    struct CXLFixedWindow *fw;
+    HostMemoryBackend *hmb_dc;
+    uint8_t tag[0x10];
     uint32_t i, num;
     uint64_t dpa, len;
+    int rid;
     CXLRetCode ret;
 
     if (len_in < sizeof(*in)) {
@@ -3776,10 +3802,54 @@ static CXLRetCode cmd_dcd_add_dyn_cap_rsp(const struct cxl_cmd *cmd,
     for (i = 0; i < in->num_entries_updated; i++) {
         dpa = in->updated_entries[i].start_dpa;
         len = in->updated_entries[i].len;
+        if (ct3d->dc.total_capacity_cmd) {
+            bool found;
+            MemoryRegion *mr;
 
-        cxl_insert_extent_to_extent_list(extent_list,
-                                         NULL, NULL, dpa, len,
-                                         NULL, 0, 0);
+            found = cxl_extent_find_extent_detail(&ct3d->dc.extents_pending,
+                                                  dpa, len, tag,
+                                                  &hmb_dc, &fw, &rid);
+
+            /*
+             * Host accepted an extent where device lacks details including
+             * wrong DPA or wrong length.
+             */
+            if (!found) {
+                qemu_log_mask(LOG_GUEST_ERROR,
+                              "Could not find the extent detail for DPA 0x%"
+                              PRIx64 " LEN 0x%" PRIx64 "\n", dpa, len);
+                return CXL_MBOX_INVALID_PA;
+            }
+
+            /* The host memory backend should not be already mapped */
+            if (host_memory_backend_is_mapped(hmb_dc)) {
+                qemu_log_mask(LOG_GUEST_ERROR,
+                              "The host memory backend for DPA 0x%" PRIx64
+                              " LEN 0x%" PRIx64 " is already mapped\n",
+                              dpa, len);
+                return CXL_MBOX_INVALID_PA;
+            }
+
+            mr = host_memory_backend_get_memory(hmb_dc);
+            if (!mr) {
+                qemu_log_mask(LOG_GUEST_ERROR,
+                              "Could not get memory region from "
+                              "host memory backend\n");
+                return CXL_MBOX_INVALID_PA;
+            }
+
+            memory_region_set_nonvolatile(mr, false);
+            memory_region_set_enabled(mr, true);
+            host_memory_backend_set_mapped(hmb_dc, true);
+
+            cxl_insert_extent_to_extent_list(extent_list,
+                                             hmb_dc, fw, dpa, len,
+                                             NULL, 0, rid);
+        } else {
+            cxl_insert_extent_to_extent_list(extent_list,
+                                             NULL, NULL, dpa, len,
+                                             NULL, 0, -1);
+        }
         ct3d->dc.total_extent_count += 1;
         ct3d->dc.nr_extents_accepted += 1;
         ct3_set_region_block_backed(ct3d, dpa, len);
