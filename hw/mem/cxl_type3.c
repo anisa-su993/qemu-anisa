@@ -2535,11 +2535,24 @@ static void qmp_cxl_process_dynamic_capacity_prescriptive(const char *path,
         memcpy(extents[i].tag, &uuid.data, 0x10);
         extents[i].shared_seq = 0;
         if (type == DC_EVENT_ADD_CAPACITY) {
-            group = cxl_insert_extent_to_extent_group(group,
-                                                      extents[i].start_dpa,
-                                                      extents[i].len,
-                                                      extents[i].tag,
-                                                      extents[i].shared_seq);
+            if (!dcd->dc.total_capacity_cmd) {
+                group = cxl_insert_extent_to_extent_group(group,
+                                                          NULL, NULL,
+                                                          extents[i].start_dpa,
+                                                          extents[i].len,
+                                                          extents[i].tag,
+                                                          extents[i].shared_seq,
+                                                          rid);
+            } else {
+                group = cxl_insert_extent_to_extent_group(group,
+                                                          dcd->dc.host_dc,
+                                                          dcd->dc.fw,
+                                                          extents[i].start_dpa,
+                                                          extents[i].len,
+                                                          extents[i].tag,
+                                                          extents[i].shared_seq,
+                                                          rid);
+            }
         }
 
         list = list->next;

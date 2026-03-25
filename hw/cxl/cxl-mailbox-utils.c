@@ -3560,20 +3560,26 @@ CXLDCRegion *cxl_find_dc_region(CXLType3Dev *ct3d, uint64_t dpa, uint64_t len)
 }
 
 void cxl_insert_extent_to_extent_list(CXLDCExtentList *list,
+                                             HostMemoryBackend *hm,
+                                             struct CXLFixedWindow *fw,
                                              uint64_t dpa,
                                              uint64_t len,
                                              uint8_t *tag,
-                                             uint16_t shared_seq)
+                                             uint16_t shared_seq,
+                                             int rid)
 {
     CXLDCExtent *extent;
 
     extent = g_new0(CXLDCExtent, 1);
+    extent->hm = hm;
+    extent->fw = fw;
     extent->start_dpa = dpa;
     extent->len = len;
     if (tag) {
         memcpy(extent->tag, tag, 0x10);
     }
     extent->shared_seq = shared_seq;
+    extent->rid = rid;
 
     QTAILQ_INSERT_TAIL(list, extent, node);
 }
@@ -3591,17 +3597,21 @@ void cxl_remove_extent_from_extent_list(CXLDCExtentList *list,
  * Return value: the extent group where the extent is inserted.
  */
 CXLDCExtentGroup *cxl_insert_extent_to_extent_group(CXLDCExtentGroup *group,
+                                                    HostMemoryBackend *host_mem,
+                                                    struct CXLFixedWindow *fw,
                                                     uint64_t dpa,
                                                     uint64_t len,
                                                     uint8_t *tag,
-                                                    uint16_t shared_seq)
+                                                    uint16_t shared_seq,
+                                                    int rid)
 {
     if (!group) {
         group = g_new0(CXLDCExtentGroup, 1);
         QTAILQ_INIT(&group->list);
     }
-    cxl_insert_extent_to_extent_list(&group->list, dpa, len,
-                                     tag, shared_seq);
+    cxl_insert_extent_to_extent_list(&group->list,
+                                     host_mem, fw, dpa, len,
+                                     tag, shared_seq, rid);
     return group;
 }
 
@@ -3767,7 +3777,9 @@ static CXLRetCode cmd_dcd_add_dyn_cap_rsp(const struct cxl_cmd *cmd,
         dpa = in->updated_entries[i].start_dpa;
         len = in->updated_entries[i].len;
 
-        cxl_insert_extent_to_extent_list(extent_list, dpa, len, NULL, 0);
+        cxl_insert_extent_to_extent_list(extent_list,
+                                         NULL, NULL, dpa, len,
+                                         NULL, 0, 0);
         ct3d->dc.total_extent_count += 1;
         ct3d->dc.nr_extents_accepted += 1;
         ct3_set_region_block_backed(ct3d, dpa, len);
@@ -3800,8 +3812,11 @@ static uint32_t copy_extent_list(CXLDCExtentList *dst,
     }
 
     QTAILQ_FOREACH(ent, src, node) {
-        cxl_insert_extent_to_extent_list(dst, ent->start_dpa, ent->len,
-                                         ent->tag, ent->shared_seq);
+        cxl_insert_extent_to_extent_list(dst,
+                                         ent->hm, ent->fw,
+                                         ent->start_dpa, ent->len,
+                                         ent->tag, ent->shared_seq,
+                                         ent->rid);
         cnt++;
     }
     return cnt;
@@ -3864,14 +3879,16 @@ static CXLRetCode cxl_dc_extent_release_dry_run(CXLType3Dev *ct3d,
 
                     if (len1) {
                         cxl_insert_extent_to_extent_list(updated_list,
-                                                         ent_start_dpa,
-                                                         len1, NULL, 0);
+                                                         NULL, NULL,
+                                                         ent_start_dpa, len1,
+                                                         NULL, 0, ent->rid);
                         cnt_delta++;
                     }
                     if (len2) {
                         cxl_insert_extent_to_extent_list(updated_list,
-                                                         dpa + len,
-                                                         len2, NULL, 0);
+                                                         NULL, NULL,
+                                                         dpa + len, len2,
+                                                         NULL, 0, ent->rid);
                         cnt_delta++;
                     }
 
@@ -4380,9 +4397,11 @@ static CXLRetCode cmd_fm_initiate_dc_add(const struct cxl_cmd *cmd,
             for (i = 0; i < in->ext_count; i++) {
                 CXLDCExtentRaw *ext = &in->extents[i];
 
-                group = cxl_insert_extent_to_extent_group(group, ext->start_dpa,
+                group = cxl_insert_extent_to_extent_group(group,
+                                                          NULL, NULL,
+                                                          ext->start_dpa,
                                                           ext->len, ext->tag,
-                                                          ext->shared_seq);
+                                                          ext->shared_seq, 0);
             }
 
             cxl_extent_group_list_insert_tail(&ct3d->dc.extents_pending, group);

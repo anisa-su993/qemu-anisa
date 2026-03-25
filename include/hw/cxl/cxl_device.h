@@ -10,6 +10,7 @@
 #ifndef CXL_DEVICE_H
 #define CXL_DEVICE_H
 
+#include "hw/cxl/cxl.h"
 #include "hw/cxl/cxl_component.h"
 #include "hw/pci/pci_device.h"
 #include "hw/core/register.h"
@@ -697,11 +698,14 @@ typedef struct CXLDCExtentRaw {
 } QEMU_PACKED CXLDCExtentRaw;
 
 typedef struct CXLDCExtent {
+    HostMemoryBackend *hm;
+    struct CXLFixedWindow *fw;
     uint64_t start_dpa;
     uint64_t len;
     uint8_t tag[0x10];
     uint16_t shared_seq;
     uint8_t rsvd[0x6];
+    int rid;
 
     QTAILQ_ENTRY(CXLDCExtent) node;
 } CXLDCExtent;
@@ -851,6 +855,7 @@ struct CXLType3Dev {
     struct dynamic_capacity {
         HostMemoryBackend *host_dc;
         AddressSpace host_dc_as;
+        struct CXLFixedWindow *fw;
         /*
          * total_capacity is equivalent to the dynamic capability
          * memory region size.
@@ -948,18 +953,26 @@ CXLDCRegion *cxl_find_dc_region(CXLType3Dev *ct3d, uint64_t dpa, uint64_t len);
 
 void cxl_remove_extent_from_extent_list(CXLDCExtentList *list,
                                         CXLDCExtent *extent);
-void cxl_insert_extent_to_extent_list(CXLDCExtentList *list, uint64_t dpa,
-                                      uint64_t len, uint8_t *tag,
-                                      uint16_t shared_seq);
+void cxl_insert_extent_to_extent_list(CXLDCExtentList *list,
+                                      HostMemoryBackend *hm,
+                                      struct CXLFixedWindow *fw,
+                                      uint64_t dpa,
+                                      uint64_t len,
+                                      uint8_t *tag,
+                                      uint16_t shared_seq,
+                                      int rid);
 bool test_any_bits_set(const unsigned long *addr, unsigned long nr,
                        unsigned long size);
 bool cxl_extents_contains_dpa_range(CXLDCExtentList *list,
                                     uint64_t dpa, uint64_t len);
 CXLDCExtentGroup *cxl_insert_extent_to_extent_group(CXLDCExtentGroup *group,
+                                                    HostMemoryBackend *host_mem,
+                                                    struct CXLFixedWindow *fw,
                                                     uint64_t dpa,
                                                     uint64_t len,
                                                     uint8_t *tag,
-                                                    uint16_t shared_seq);
+                                                    uint16_t shared_seq,
+                                                    int rid);
 void cxl_extent_group_list_insert_tail(CXLDCExtentGroupList *list,
                                        CXLDCExtentGroup *group);
 uint32_t cxl_extent_group_list_delete_front(CXLDCExtentGroupList *list);
