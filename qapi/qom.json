@@ -658,6 +658,8 @@
 # @reserve: if true, reserve swap space (or huge pages) if applicable
 #     (default: true) (since 6.1)
 #
+# @tag: user-defined memory backend tag (since 11.1)
+#
 # @size: size of the memory region in bytes
 #
 # @x-use-canonical-path-for-ramblock-id: if true, the canonical path
@@ -683,6 +685,7 @@
             '*prealloc-context': 'str',
             '*share': 'bool',
             '*reserve': 'bool',
+            '*tag': 'str',
             'size': 'size',
             '*x-use-canonical-path-for-ramblock-id': 'bool' } }
 

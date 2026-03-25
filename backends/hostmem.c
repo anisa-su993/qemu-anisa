@@ -47,6 +47,50 @@ host_memory_backend_get_name(HostMemoryBackend *backend)
     return object_get_canonical_path(OBJECT(backend));
 }
 
+typedef struct HostMemoryBackendTagSearch {
+    const char *tag;
+    HostMemoryBackend *backend;
+} HostMemoryBackendTagSearch;
+
+static int host_memory_backend_find_by_tag_cb(Object *obj, void *opaque)
+{
+    HostMemoryBackendTagSearch *ctx = opaque;
+    HostMemoryBackend *backend;
+
+    if (!object_dynamic_cast(obj, TYPE_MEMORY_BACKEND)) {
+        return 0;
+    }
+
+    backend = MEMORY_BACKEND(obj);
+    if (!backend->tag) {
+        return 0;
+    }
+
+    if (strcmp(backend->tag, ctx->tag) == 0) {
+        ctx->backend = backend;
+        return 1;
+    }
+
+    return 0;
+}
+
+HostMemoryBackend *host_memory_backend_find_by_tag(const char *tag)
+{
+    HostMemoryBackendTagSearch ctx = {
+        .tag = tag,
+        .backend = NULL,
+    };
+
+    if (!tag) {
+        return NULL;
+    }
+
+    object_child_foreach_recursive(object_get_objects_root(),
+                                   host_memory_backend_find_by_tag_cb, &ctx);
+
+    return ctx.backend;
+}
+
 static void
 host_memory_backend_get_size(Object *obj, Visitor *v, const char *name,
                              void *opaque, Error **errp)
@@ -460,6 +504,22 @@ static void host_memory_backend_set_share(Object *o, bool value, Error **errp)
     backend->share = value;
 }
 
+static void
+host_memory_backend_set_tag(Object *obj, const char *value, Error **errp)
+{
+    HostMemoryBackend *backend = MEMORY_BACKEND(obj);
+
+    g_free(backend->tag);
+    backend->tag = g_strdup(value);
+}
+
+static char *host_memory_backend_get_tag(Object *obj, Error **errp)
+{
+    HostMemoryBackend *backend = MEMORY_BACKEND(obj);
+
+    return g_strdup(backend->tag);
+}
+
 #ifdef CONFIG_LINUX
 static bool host_memory_backend_get_reserve(Object *o, Error **errp)
 {
@@ -499,6 +559,13 @@ host_memory_backend_set_use_canonical_path(Object *obj, bool value,
     HostMemoryBackend *backend = MEMORY_BACKEND(obj);
 
     backend->use_canonical_path = value;
+}
+
+static void host_memory_backend_finalize(Object *obj)
+{
+    HostMemoryBackend *backend = MEMORY_BACKEND(obj);
+
+    g_free(backend->tag);
 }
 
 static void
@@ -557,6 +624,10 @@ host_memory_backend_class_init(ObjectClass *oc, const void *data)
         host_memory_backend_get_share, host_memory_backend_set_share);
     object_class_property_set_description(oc, "share",
         "Mark the memory as private to QEMU or shared");
+    object_class_property_add_str(oc, "tag",
+        host_memory_backend_get_tag, host_memory_backend_set_tag);
+    object_class_property_set_description(oc, "tag",
+        "A user-defined tag to identify this memory backend");
 #ifdef CONFIG_LINUX
     object_class_property_add_bool(oc, "reserve",
         host_memory_backend_get_reserve, host_memory_backend_set_reserve);
@@ -586,6 +657,7 @@ static const TypeInfo host_memory_backend_info = {
     .class_init = host_memory_backend_class_init,
     .instance_size = sizeof(HostMemoryBackend),
     .instance_init = host_memory_backend_init,
+    .instance_finalize = host_memory_backend_finalize,
     .instance_post_init = host_memory_backend_post_init,
     .interfaces = (const InterfaceInfo[]) {
         { TYPE_USER_CREATABLE },

@@ -17,6 +17,7 @@
 
 #define RAM_NAME "node0"
 #define RAM_SIZE 65536
+#define RAM_TAG "ramtag0"
 
 static int verbosity_level;
 
@@ -59,6 +60,8 @@ static void test_list_get_value(QTestState *qts)
 
         } else if (!strcmp(prop_name, "size")) {
             g_assert_cmpint(qdict_get_int(prop, "value"), ==, RAM_SIZE);
+        } else if (!strcmp(prop_name, "tag")) {
+            g_assert_cmpstr(qdict_get_str(prop, "value"), ==, RAM_TAG);
         }
     }
 }
@@ -195,8 +198,9 @@ static void test_machine(gconstpointer data)
     QTestState *qts;
     g_autoptr(QList) paths = qlist_new();
 
-    qts = qtest_initf("-machine %s -object memory-backend-ram,id=%s,size=%d",
-                      machine, RAM_NAME, RAM_SIZE);
+    qts = qtest_initf("-machine %s -object memory-backend-ram,id=%s,size=%d"
+                      ",tag=%s",
+                      machine, RAM_NAME, RAM_SIZE, RAM_TAG);
 
     if (g_test_slow()) {
         /* Make sure we can get the machine class properties: */
