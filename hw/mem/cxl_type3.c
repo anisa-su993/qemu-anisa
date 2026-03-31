@@ -2615,9 +2615,11 @@ static void qmp_cxl_process_dynamic_capacity_tag_based(const char *path,
             extents = g_renew(CXLDCExtentRaw, extents, cap);
         }
 
-        extents[n++] = (CXLDCExtentRaw){ .start_dpa = ent->start_dpa,
-                                         .len = ent->len,
-                                         .shared_seq = 0 };
+        extents[n] = (CXLDCExtentRaw){ .start_dpa = ent->start_dpa,
+                                       .len = ent->len,
+                                       .shared_seq = 0 };
+        memcpy(extents[n].tag, uuid_ext.data, 0x10);
+        n++;
     }
 
     if (n == 0) {
