@@ -3367,6 +3367,29 @@ static CXLRetCode cmd_media_get_scan_media_results(const struct cxl_cmd *cmd,
 }
 
 /*
+ * TEST ONLY -- not for upstream.  Parse "<region>:<value>" from an
+ * environment variable so Get DC Configuration replies can be malformed
+ * at will, exercising host-side validation without special hardware.
+ * Sets *idx to -1 when the variable is unset or unparsable.
+ */
+static void cxl_test_parse_pair(const char *env, int *idx, uint64_t *val)
+{
+    const char *s = getenv(env);
+    char *end;
+
+    *idx = -1;
+    if (!s) {
+        return;
+    }
+    *idx = strtol(s, &end, 0);
+    if (*end != ':') {
+        *idx = -1;
+        return;
+    }
+    *val = strtoull(end + 1, NULL, 0);
+}
+
+/*
  * CXL r3.1 section 8.2.9.9.9.1: Get Dynamic Capacity Configuration
  * (Opcode: 4800h)
  */
@@ -3435,6 +3458,66 @@ static CXLRetCode cmd_dcd_get_dyn_cap_config(const struct cxl_cmd *cmd,
                  ct3d->dc.regions[start_rid + i].dsmadhandle);
         out->records[i].flags = ct3d->dc.regions[start_rid + i].flags;
     }
+
+    /*
+     * TEST ONLY -- not for upstream.  Malform the reply under environment
+     * control so host-side validation paths can be reached.  Region indices
+     * below are global, matching the driver's "DC partition N" messages.
+     *
+     *   CXL_TEST_UNAVAIL=N    regions >= N report the all-zero
+     *                         "unavailable for DC" triple (CXL r4.0
+     *                         Table 8-347)
+     *   CXL_TEST_BASE=N:V     region N reports base V
+     *   CXL_TEST_DECODE=N:V   region N reports decode length V, in
+     *                         256MB multiplier units
+     *   CXL_TEST_LEN=N:V      region N reports length V
+     *   CXL_TEST_BLKSIZE=N:V  region N reports block size V
+     *   CXL_TEST_HANDLE=N:V   region N reports DSMAD handle V
+     *   CXL_TEST_NUMREG=V     reply advertises V available regions
+     */
+    {
+        const char *s;
+        int tidx;
+        uint64_t tval = 0;
+
+        s = getenv("CXL_TEST_UNAVAIL");
+        if (s) {
+            unsigned long first = strtoul(s, NULL, 0);
+
+            for (i = 0; i < record_count; i++) {
+                if (start_rid + i >= first) {
+                    stq_le_p(&out->records[i].decode_len, 0);
+                    stq_le_p(&out->records[i].region_len, 0);
+                    stq_le_p(&out->records[i].block_size, 0);
+                }
+            }
+        }
+
+#define CXL_TEST_SETQ(env, field)                                          \
+        do {                                                               \
+            cxl_test_parse_pair(env, &tidx, &tval);                        \
+            if (tidx >= start_rid && tidx < start_rid + record_count) {    \
+                stq_le_p(&out->records[tidx - start_rid].field, tval);     \
+            }                                                              \
+        } while (0)
+
+        CXL_TEST_SETQ("CXL_TEST_BASE", base);
+        CXL_TEST_SETQ("CXL_TEST_DECODE", decode_len);
+        CXL_TEST_SETQ("CXL_TEST_LEN", region_len);
+        CXL_TEST_SETQ("CXL_TEST_BLKSIZE", block_size);
+#undef CXL_TEST_SETQ
+
+        cxl_test_parse_pair("CXL_TEST_HANDLE", &tidx, &tval);
+        if (tidx >= start_rid && tidx < start_rid + record_count) {
+            stl_le_p(&out->records[tidx - start_rid].dsmadhandle, tval);
+        }
+
+        s = getenv("CXL_TEST_NUMREG");
+        if (s) {
+            out->num_regions = strtoul(s, NULL, 0);
+        }
+    }
+
     /*
      * TODO: Assign values once extents and tags are introduced
      * to use.
