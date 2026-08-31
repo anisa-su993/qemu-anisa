@@ -330,6 +330,8 @@ static CXLRetCode cmd_events_set_interrupt_policy(const struct cxl_cmd *cmd,
     log->irq_enabled = (policy->fatal_settings & CXL_EVENT_INT_MODE_MASK) ==
                         CXL_INT_MSI_MSIX;
 
+    cxl_test_event_irq_storm_arm(CXL_TYPE3(cci->d));
+
     /* DCD is optional */
     if (len_in < sizeof(*policy)) {
         return CXL_MBOX_SUCCESS;

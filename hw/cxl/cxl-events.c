@@ -9,6 +9,7 @@
 
 #include "qemu/osdep.h"
 #include "qemu/error-report.h"
+#include "qemu/timer.h"
 #include "hw/pci/msi.h"
 #include "hw/pci/msix.h"
 #include "hw/cxl/cxl.h"
@@ -16,6 +17,94 @@
 
 /* Artificial limit on the number of events a log can hold */
 #define CXL_TEST_EVENT_OVERFLOW 8
+
+/*
+ * TEST ONLY: misbehaving device emulation, selected from the environment.
+ *
+ *   CXL_TEST_STICKY_EVENT_STATUS=1  leave the Event Status bit set once the
+ *                                   log has been drained
+ *   CXL_TEST_EVENT_RETRY=1          answer Get/Clear Event Records with Retry
+ *                                   Required for every log
+ *   CXL_TEST_BAD_RECORD_COUNT=1     claim more records than the payload holds
+ *   CXL_TEST_EVENT_IRQ_STORM=1      raise the event interrupt without ever
+ *                                   putting a record in a log
+ *   CXL_TEST_ENDLESS_RECORDS=1      acknowledge Clear Event Records without
+ *                                   removing anything, so the log never drains
+ */
+static bool cxl_test_knob(const char *name)
+{
+    const char *val = getenv(name);
+
+    return val && val[0] == '1';
+}
+
+/*
+ * TEST ONLY: a device that screams on its event vector with every log
+ * empty, so the host's handler has nothing to do and must disown the
+ * interrupt.  Armed when the host sets the event interrupt policy and
+ * started a little later, so the rest of probe is out of the way.
+ *
+ * It stops once the host masks the vector, which is what the kernel's
+ * spurious detector does when it gives up on a screaming interrupt, and
+ * gives up on its own after CXL_TEST_STORM_MAX ticks if the host never
+ * does.  The 100000 interrupts note_interrupt() wants before it will
+ * disable anything set the floor for that ceiling.
+ */
+#define CXL_TEST_STORM_START_NS  (2 * NANOSECONDS_PER_SECOND)
+#define CXL_TEST_STORM_PERIOD_NS 50000
+#define CXL_TEST_STORM_MAX       400000
+#define CXL_TEST_STORM_QUIET     20000
+
+static struct {
+    QEMUTimer *timer;
+    CXLType3Dev *ct3d;
+    int vector;
+    unsigned int ticks;
+    unsigned int masked;
+} cxl_test_storm;
+
+static void cxl_test_event_irq_storm_tick(void *opaque)
+{
+    PCIDevice *pdev = &cxl_test_storm.ct3d->parent_obj;
+    unsigned int vector = cxl_test_storm.vector;
+
+    if (msix_enabled(pdev)) {
+        if (msix_is_masked(pdev, vector)) {
+            cxl_test_storm.masked++;
+        } else {
+            cxl_test_storm.masked = 0;
+        }
+        msix_notify(pdev, vector);
+    } else if (msi_enabled(pdev)) {
+        msi_notify(pdev, vector);
+    }
+
+    if (++cxl_test_storm.ticks >= CXL_TEST_STORM_MAX ||
+        cxl_test_storm.masked >= CXL_TEST_STORM_QUIET) {
+        return;
+    }
+
+    timer_mod_ns(cxl_test_storm.timer,
+                 qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
+                 CXL_TEST_STORM_PERIOD_NS);
+}
+
+void cxl_test_event_irq_storm_arm(CXLType3Dev *ct3d)
+{
+    CXLEventLog *log = &ct3d->cxl_dstate.event_logs[CXL_EVENT_TYPE_INFO];
+
+    if (!cxl_test_knob("CXL_TEST_EVENT_IRQ_STORM") || cxl_test_storm.timer) {
+        return;
+    }
+
+    cxl_test_storm.ct3d = ct3d;
+    cxl_test_storm.vector = log->irq_vec;
+    cxl_test_storm.timer = timer_new_ns(QEMU_CLOCK_VIRTUAL,
+                                        cxl_test_event_irq_storm_tick, NULL);
+    timer_mod_ns(cxl_test_storm.timer,
+                 qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
+                 CXL_TEST_STORM_START_NS);
+}
 
 static void reset_overflow(CXLEventLog *log)
 {
@@ -82,7 +171,7 @@ static void cxl_event_delete_head(CXLDeviceState *cxlds,
 
     reset_overflow(log);
     QSIMPLEQ_REMOVE_HEAD(&log->events, node);
-    if (cxl_event_empty(log)) {
+    if (cxl_event_empty(log) && !cxl_test_knob("CXL_TEST_STICKY_EVENT_STATUS")) {
         cxl_event_set_status(cxlds, log_type, false);
     }
     g_free(entry);
@@ -162,6 +251,10 @@ CXLRetCode cxl_event_get_records(CXLDeviceState *cxlds, CXLGetEventPayload *pl,
         return CXL_MBOX_INVALID_INPUT;
     }
 
+    if (cxl_test_knob("CXL_TEST_EVENT_RETRY")) {
+        return CXL_MBOX_RETRY_REQUIRED;
+    }
+
     log = &cxlds->event_logs[log_type];
 
     QEMU_LOCK_GUARD(&log->lock);
@@ -188,6 +281,14 @@ CXLRetCode cxl_event_get_records(CXLDeviceState *cxlds, CXLGetEventPayload *pl,
     pl->record_count = cpu_to_le16(nr);
     *len = CXL_EVENT_PAYLOAD_HDR_SIZE + (CXL_EVENT_RECORD_SIZE * nr);
 
+    /*
+     * TEST ONLY: claim far more records than the payload just returned,
+     * so the host is asked to walk off the end of its event buffer.
+     */
+    if (nr && cxl_test_knob("CXL_TEST_BAD_RECORD_COUNT")) {
+        pl->record_count = cpu_to_le16(nr + 1);
+    }
+
     return CXL_MBOX_SUCCESS;
 }
 
@@ -203,6 +304,18 @@ CXLRetCode cxl_event_clear_records(CXLDeviceState *cxlds,
 
     if (log_type >= CXL_EVENT_TYPE_MAX) {
         return CXL_MBOX_INVALID_INPUT;
+    }
+
+    if (cxl_test_knob("CXL_TEST_EVENT_RETRY")) {
+        return CXL_MBOX_RETRY_REQUIRED;
+    }
+
+    /*
+     * TEST ONLY: acknowledge the clear but remove nothing, so every Get
+     * Event Records returns the same records and the log never drains.
+     */
+    if (cxl_test_knob("CXL_TEST_ENDLESS_RECORDS")) {
+        return CXL_MBOX_SUCCESS;
     }
 
     log = &cxlds->event_logs[log_type];

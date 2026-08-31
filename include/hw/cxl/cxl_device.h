@@ -958,6 +958,8 @@ CXLRetCode cxl_event_clear_records(CXLDeviceState *cxlds,
 void cxl_discard_all_event_records(CXLDeviceState *cxlds);
 
 void cxl_event_irq_assert(CXLType3Dev *ct3d);
+/* TEST ONLY: see CXL_TEST_EVENT_IRQ_STORM in hw/cxl/cxl-events.c */
+void cxl_test_event_irq_storm_arm(CXLType3Dev *ct3d);
 
 void cxl_set_poison_list_overflowed(CXLType3Dev *ct3d);
 void cxl_clear_poison_list_overflowed(CXLType3Dev *ct3d);
